@@ -1,12 +1,25 @@
 import { NextResponse } from 'next/server';
 import { getSheetsClient } from '@/lib/google';
-import { supabase } from '@/lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 import { SHEET_MAPPING } from '@/config/sheetMapping';
 
 export async function POST(req: Request) {
     try {
         const { projectId, inputs } = await req.json();
         if (!projectId || !inputs) return NextResponse.json({ error: 'Missing data' }, { status: 400 });
+
+        // Create Supabase client with Auth context
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+                global: {
+                    headers: {
+                        Authorization: req.headers.get('Authorization') ?? '',
+                    },
+                },
+            }
+        );
 
         // 1. Get Project's Spreadsheet ID
         const { data: project, error } = await supabase

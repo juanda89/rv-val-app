@@ -25,7 +25,8 @@ export const Step2RentRoll: React.FC<Step2Props> = ({ onDataChange, initialData 
             setError(null);
             onDataChange(inputs);
         }
-    }, [inputs, onDataChange]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inputs]);
 
     const handleChange = (field: string, value: string) => {
         setInputs(prev => ({ ...prev, [field]: value }));

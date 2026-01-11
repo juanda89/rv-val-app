@@ -8,6 +8,7 @@ import { Step4Taxes } from './Step4Taxes';
 import { Button } from "@/components/ui/Button";
 import { useSheetSync } from '@/hooks/useSheetSync';
 import { Dashboard } from '@/components/dashboard/Dashboard';
+import { supabase } from '@/lib/supabaseClient';
 
 const STEPS = [
     { id: 1, title: 'Property Basics', icon: 'domain' },
@@ -17,59 +18,62 @@ const STEPS = [
     { id: 5, title: 'Results', icon: 'analytics' },
 ];
 
-export const WizardLayout = () => {
+export const WizardLayout = ({ user }: { user?: any }) => {
+    // 1. All hooks must run first
     const [mounted, setMounted] = useState(false);
     const [currentStep, setCurrentStep] = useState(1);
-
-    React.useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    if (!mounted) return null; // Prevent hydration mismatch
-
     const [formData, setFormData] = useState<any>({});
     const [outputs, setOutputs] = useState<any>(null); // Store sync results
     const [projectId, setProjectId] = useState<string | null>(null);
     const [creatingProject, setCreatingProject] = useState(false);
-
     const { sync, isSyncing } = useSheetSync(projectId || '');
 
-    const handleDataChange = async (stepData: any) => {
-        const newData = { ...formData, ...stepData };
-        setFormData(newData);
+    // 2. Effects
+    React.useEffect(() => {
+        setMounted(true);
+    }, []);
 
-        // If we have a project ID, sync immediately (debounced ideally, but hook handles async)
+    // 3. Conditional Rendering (after all hooks)
+    if (!mounted) return null; // Prevent hydration mismatch
+
+    // Cleaned up handleDataChange
+    const handleDataChange = React.useCallback(async (stepData: any) => {
+        setFormData((prev: any) => ({ ...prev, ...stepData }));
+
         if (projectId) {
-            const results = await sync(stepData);
-            if (results) {
-                setOutputs((prev: any) => ({ ...prev, ...results }));
-            }
+            await sync(stepData).then(results => {
+                if (results) setOutputs((prev: any) => ({ ...prev, ...results }));
+            });
         }
-    };
+    }, [projectId, sync]);
+
 
     const handleStep1Complete = async (data: any) => {
         // Special handling for Step 1: Create Project if not exists
         if (!projectId) {
             setCreatingProject(true);
             try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token;
+
                 const res = await fetch('/api/projects/create', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token ? `Bearer ${token}` : ''
+                    },
                     body: JSON.stringify({
                         name: data.address || 'New Project',
                         address: data.address,
-                        user_id: 'test-user-id-placeholder' // In real app, get from Supabase Auth Context
+                        user_id: user?.id
                     })
                 });
                 const json = await res.json();
                 if (json.project?.id) {
                     setProjectId(json.project.id);
                     // Sync the initial data
-                    const results = await fetch('/api/sheet/sync', {
-                        method: 'POST',
-                        body: JSON.stringify({ projectId: json.project.id, inputs: data })
-                    }).then(r => r.json()).then(d => d.results);
-                    setOutputs(results);
+                    const results = await sync(data);
+                    if (results) setOutputs(results);
                 }
             } catch (e) {
                 console.error(e);

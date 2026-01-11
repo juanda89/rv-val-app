@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDriveClient } from '@/lib/google';
-import { supabase } from '@/lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: Request) {
     try {
@@ -9,6 +9,19 @@ export async function POST(req: Request) {
         if (!name || !user_id) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
+
+        // Create Supabase client with Auth context
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+                global: {
+                    headers: {
+                        Authorization: req.headers.get('Authorization') ?? '',
+                    },
+                },
+            }
+        );
 
         const drive = await getDriveClient();
         const MASTER_ID = process.env.MASTER_SHEET_ID;

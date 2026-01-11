@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 
 export function useSheetSync(projectId: string) {
     const [isSyncing, setIsSyncing] = useState(false);
@@ -10,9 +11,15 @@ export function useSheetSync(projectId: string) {
         setError(null);
 
         try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
             const response = await fetch('/api/sheet/sync', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                },
                 body: JSON.stringify({ projectId, inputs }),
             });
 
