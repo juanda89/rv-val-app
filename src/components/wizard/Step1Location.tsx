@@ -12,6 +12,33 @@ interface Step1Props {
     initialData?: any;
 }
 
+const extractCityFromAddressString = (address?: string) => {
+    if (!address) return '';
+    const parts = address
+        .split(',')
+        .map(part => part.trim())
+        .filter(Boolean);
+
+    if (parts.length >= 3) return parts[1];
+    if (parts.length === 2) return parts[0];
+    return '';
+};
+
+const extractCityFromGeocode = (result: any) => {
+    const components = result?.address_components || [];
+    const findComponent = (type: string) =>
+        components.find((component: any) => component.types?.includes(type))?.long_name || '';
+
+    return (
+        findComponent('locality') ||
+        findComponent('postal_town') ||
+        findComponent('administrative_area_level_2') ||
+        findComponent('sublocality') ||
+        findComponent('neighborhood') ||
+        ''
+    );
+};
+
 const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
     const {
         ready,
@@ -25,6 +52,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
     });
 
     const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(initialData?.lat ? { lat: initialData.lat, lng: initialData.lng } : null);
+    const [projectName, setProjectName] = useState(initialData?.name || '');
 
     const handleSelect = async (address: string) => {
         setValue(address, false);
@@ -34,9 +62,12 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
             const results = await getGeocode({ address });
             const { lat, lng } = await getLatLng(results[0]);
             setCoordinates({ lat, lng });
+            const city = extractCityFromGeocode(results[0]) || extractCityFromAddressString(address);
 
             onDataChange({
+                name: projectName || address, // Use project name or fallback to address
                 address,
+                city,
                 lat,
                 lng,
                 // Mock demographics for now
@@ -52,7 +83,17 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
         <div className="space-y-6">
             <div className="flex flex-col gap-3">
                 <h2 className="text-xl font-bold text-white">Location & Details</h2>
-                <p className="text-sm text-gray-400">Search for the RV park location to auto-populate data.</p>
+                <p className="text-sm text-gray-400">Enter project name and search for the RV park location.</p>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Project Name</label>
+                <Input
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    placeholder="e.g., Sunset RV Park"
+                    className="w-full bg-[#283339] border-transparent text-white focus:ring-blue-500"
+                />
             </div>
 
             <div>
@@ -110,6 +151,8 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
 
 export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData }) => {
     const hasApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder');
+    const [manualName, setManualName] = React.useState(initialData?.name || '');
+    const [manualAddress, setManualAddress] = React.useState(initialData?.address || '');
 
     if (!hasApiKey) {
         return (
@@ -128,10 +171,41 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                 </div>
 
                 <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Project Name</label>
+                    <Input
+                        value={manualName}
+                        onChange={e => {
+                            setManualName(e.target.value);
+                            onDataChange({
+                                name: e.target.value,
+                                address: manualAddress,
+                                city: extractCityFromAddressString(manualAddress),
+                            });
+                        }}
+                        placeholder="e.g., Sunset RV Park"
+                        className="w-full bg-[#283339] border-transparent text-white"
+                    />
+                </div>
+
+                <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">Manual Property Address</label>
                     <Input
-                        value={initialData?.address || ''}
-                        onChange={e => onDataChange({ address: e.target.value })}
+                        value={manualAddress}
+                        onChange={e => {
+                            setManualAddress(e.target.value);
+                            onDataChange({
+                                name: manualName,
+                                address: e.target.value,
+                                city: extractCityFromAddressString(e.target.value),
+                            });
+                        }}
+                        onBlur={e =>
+                            onDataChange({
+                                name: manualName,
+                                address: e.target.value,
+                                city: extractCityFromAddressString(e.target.value),
+                            })
+                        } // Ensure save on blur for manual entry
                         placeholder="Enter address manually..."
                         className="w-full bg-[#283339] border-transparent text-white"
                     />

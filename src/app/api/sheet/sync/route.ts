@@ -24,7 +24,7 @@ export async function POST(req: Request) {
         // 1. Get Project's Spreadsheet ID
         const { data: project, error } = await supabase
             .from('projects')
-            .select('spreadsheet_id')
+            .select('spreadsheet_id, name, address')
             .eq('id', projectId)
             .single();
 
@@ -35,14 +35,52 @@ export async function POST(req: Request) {
 
         // 2. Prepare Updates
         const updates = [];
-        for (const [key, value] of Object.entries(inputs)) {
+        const inputSheetName = SHEET_MAPPING.inputs.sheetName;
+
+        const extractCityFromAddress = (address: string) => {
+            const parts = address
+                .split(',')
+                .map(part => part.trim())
+                .filter(Boolean);
+
+            if (parts.length >= 3) return parts[1];
+            if (parts.length === 2) return parts[0];
+            return '';
+        };
+
+        const normalizeString = (value: unknown) => {
+            if (typeof value !== 'string') return '';
+            return value.trim();
+        };
+
+        const projectName = normalizeString(inputs.name) || project.name || '';
+        const projectAddress = normalizeString(inputs.address) || project.address || '';
+        const projectCity = normalizeString(inputs.city) || extractCityFromAddress(projectAddress);
+
+        const mergedInputs = {
+            ...inputs,
+            name: projectName,
+            city: projectCity,
+            address: projectAddress,
+        };
+
+        const metadataLabels = ['name', 'city', 'address'];
+        metadataLabels.forEach((label, index) => {
+            const row = 2 + index;
+            updates.push({
+                range: `'${inputSheetName}'!B${row}`,
+                values: [[label]],
+            });
+        });
+
+        for (const [key, value] of Object.entries(mergedInputs)) {
             // Cast key to check if it exists in mapping
             const mappingKey = key as keyof typeof SHEET_MAPPING.inputs;
             const cell = SHEET_MAPPING.inputs[mappingKey];
 
-            if (cell) {
+            if (cell && mappingKey !== 'sheetName') {
                 updates.push({
-                    range: `Sheet1!${cell}`, // Assuming Sheet1. Ideally this should be configurable.
+                    range: `'${inputSheetName}'!${cell}`,
                     values: [[value]],
                 });
             }
@@ -59,8 +97,12 @@ export async function POST(req: Request) {
         }
 
         // 3. Read Outputs
-        const outputKeys = Object.keys(SHEET_MAPPING.outputs);
-        const ranges = Object.values(SHEET_MAPPING.outputs).map(cell => `Sheet1!${cell}`);
+        const outputSheetName = SHEET_MAPPING.outputs.sheetName;
+        const outputKeys = Object.keys(SHEET_MAPPING.outputs).filter(k => k !== 'sheetName');
+        const ranges = outputKeys.map(key => {
+            const cell = SHEET_MAPPING.outputs[key as keyof typeof SHEET_MAPPING.outputs];
+            return `'${outputSheetName}'!${cell}`;
+        });
 
         const response = await sheets.spreadsheets.values.batchGet({
             spreadsheetId,

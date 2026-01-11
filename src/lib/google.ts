@@ -26,3 +26,33 @@ export const getDriveClient = async () => {
     const auth = getGoogleAuth();
     return google.drive({ version: 'v3', auth });
 };
+
+export const getDriveClientWithOAuth = (accessToken: string) => {
+    const redirectUri =
+        process.env.GOOGLE_OAUTH_REDIRECT_URI ||
+        `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/google/callback`;
+    const oauth2Client = new google.auth.OAuth2(
+        process.env.PERSONALCLIENT,
+        process.env.PERSONALSECRET,
+        redirectUri
+    );
+
+    oauth2Client.setCredentials({ access_token: accessToken });
+
+    return google.drive({ version: 'v3', auth: oauth2Client });
+};
+
+export const getSheetsClientWithOAuth = (accessToken: string) => {
+    const redirectUri =
+        process.env.GOOGLE_OAUTH_REDIRECT_URI ||
+        `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/google/callback`;
+    const oauth2Client = new google.auth.OAuth2(
+        process.env.PERSONALCLIENT,
+        process.env.PERSONALSECRET,
+        redirectUri
+    );
+
+    oauth2Client.setCredentials({ access_token: accessToken });
+
+    return google.sheets({ version: 'v4', auth: oauth2Client });
+};

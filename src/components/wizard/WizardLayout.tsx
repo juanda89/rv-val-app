@@ -34,7 +34,23 @@ export const WizardLayout = ({ user }: { user?: any }) => {
     }, []);
 
     // 3. Conditional Rendering (after all hooks)
-    if (!mounted) return null; // Prevent hydration mismatch
+    // if (!mounted) return null; // Prevent hydration mismatch -- REMOVED to avoid hook mismatch in Next 15/React 18 stricter dev mode
+
+    // Instead, we just handle loading states in children or effects if needed, but for "use client" it's usually fine.
+    // However, to fix "Rendered more hooks", we CANNOT return null *before* using hooks.
+    // The previous error was because useSheetSync was called *after* a potential early return if we weren't careful, 
+    // OR if useSheetSync itself conditionally calls hooks (it doesn't seem to).
+
+    // The REAL issue from the log:
+    // 9. useCallback
+    // 10. useEffect
+    // 11. undefined vs useCallback
+
+    // This implies a hook is being called conditionally or loops are changing.
+    // `useSheetSync` is called at the top level? Yes.
+
+    // Let's remove the hydration check or move it to the very end before returning JSX.
+    // And ensure hooks are ALWAYS called.
 
     // Cleaned up handleDataChange
     const handleDataChange = React.useCallback(async (stepData: any) => {
@@ -63,17 +79,21 @@ export const WizardLayout = ({ user }: { user?: any }) => {
                         'Authorization': token ? `Bearer ${token}` : ''
                     },
                     body: JSON.stringify({
-                        name: data.address || 'New Project',
+                        name: data.name || data.address || 'New Project',
                         address: data.address,
                         user_id: user?.id
                     })
                 });
                 const json = await res.json();
+
                 if (json.project?.id) {
                     setProjectId(json.project.id);
                     // Sync the initial data
                     const results = await sync(data);
                     if (results) setOutputs(results);
+                } else if (json.error) {
+                    console.error('Project creation error:', json.error);
+                    alert(`Error creating project: ${json.error}`);
                 }
             } catch (e) {
                 console.error(e);
@@ -86,6 +106,10 @@ export const WizardLayout = ({ user }: { user?: any }) => {
 
     const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
+
+    if (!mounted) {
+        return null;
+    }
 
     return (
         <div className="flex min-h-screen bg-[#111618] text-white">

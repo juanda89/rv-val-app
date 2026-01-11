@@ -34,7 +34,10 @@ yarn-error.log*
 .env*
 !.env.example
 !.env.local.example
-!.env.local
+
+# local secrets and artifacts
+dev_server.log
+neon-net-471322-g3-ec6d38e1a614.json
 
 # vercel
 .vercel

@@ -1,11 +1,20 @@
+export const SHEET_NAMES = {
+  INPUT: 'Input Fields',
+  OUTPUT: 'Output Fields',
+  CATEGORIZATION: 'Income & Expenses Categorization'
+};
+
 export const SHEET_MAPPING = {
   inputs: {
+    sheetName: SHEET_NAMES.INPUT,
     // --- STEP 1: General & Demographics (Auto + Manual) ---
-    address: "B4",
+    name: "C2",
+    city: "C3",
+    address: "C4",
     parcelNumber: "B5",
     population_1mile: "B10", // From API
     median_income: "B11",    // From API
-    
+
     // --- STEP 2: Rent Roll (Manual Input) ---
     total_lots: "C5",
     occupied_lots: "C6",
@@ -37,6 +46,7 @@ export const SHEET_MAPPING = {
     tax_prev_year_amount: "F7",
   },
   outputs: {
+    sheetName: SHEET_NAMES.OUTPUT,
     // Calculated Results (Read from Sheets formulas)
     valuation_price: "H10",
     noi_annual: "H11",

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { getDriveClient } from '@/lib/google';
 import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: Request) {
@@ -23,23 +22,53 @@ export async function POST(req: Request) {
             }
         );
 
-        const drive = await getDriveClient();
-        const MASTER_ID = process.env.MASTER_SHEET_ID;
+        // Get user's email for sharing the sheet
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-        if (!MASTER_ID) throw new Error('MASTER_SHEET_ID not defined');
+        if (userError || !user) {
+            return NextResponse.json({
+                error: 'Could not get user',
+                details: userError
+            }, { status: 401 });
+        }
 
-        // 1. Copy Sheet
-        const copy = await drive.files.copy({
-            fileId: MASTER_ID,
-            requestBody: {
-                name: `[APP] ${name} - ${user_id}`,
+        // Call n8n webhook to duplicate master file
+        const webhookUrl = 'https://n8n-boominbm-u44048.vm.elestio.app/webhook/duplicate-master-file';
+        const fileName = `[APP] ${name}`;
+        const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+
+        if (!serviceAccountEmail) {
+            throw new Error('GOOGLE_SERVICE_ACCOUNT_EMAIL not configured');
+        }
+
+        console.log('Calling n8n webhook:', { fileName, email: serviceAccountEmail });
+
+        const webhookResponse = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
             },
+            body: JSON.stringify({
+                fileName: fileName,
+                email: serviceAccountEmail
+            })
         });
 
-        const spreadsheetId = copy.data.id;
-        if (!spreadsheetId) throw new Error('Failed to copy sheet');
+        if (!webhookResponse.ok) {
+            const errorText = await webhookResponse.text();
+            throw new Error(`Webhook failed: ${webhookResponse.status} - ${errorText}`);
+        }
 
-        // 2. Insert into Supabase
+        const webhookData = await webhookResponse.json();
+        console.log('Webhook response:', webhookData);
+
+        const spreadsheetId = webhookData.fileId || webhookData.id || webhookData.spreadsheetId;
+
+        if (!spreadsheetId) {
+            throw new Error('Webhook did not return a file ID');
+        }
+
+        // Insert into Supabase
         const { data, error } = await supabase
             .from('projects')
             .insert({
@@ -52,13 +81,18 @@ export async function POST(req: Request) {
             .single();
 
         if (error) {
-            // Cleanup: Delete the sheet if DB insert fails? (Optional improvement)
+            console.error('Supabase insert error:', error);
             throw error;
         }
+
+        console.log('Project created successfully:', data);
 
         return NextResponse.json({ project: data });
     } catch (error: any) {
         console.error('Project creation failed:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({
+            error: error.message || 'Unknown error',
+            details: error
+        }, { status: 500 });
     }
 }
