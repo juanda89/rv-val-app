@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { CreateProjectClient } from './CreateProjectClient';
+import { CreateProjectClient } from './create-project-client';
 
 export default function CreateProjectPage() {
     return (
