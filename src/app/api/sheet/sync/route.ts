@@ -64,12 +64,19 @@ export async function POST(req: Request) {
             address: projectAddress,
         };
 
-        const metadataLabels = ['name', 'city', 'address'];
-        metadataLabels.forEach((label, index) => {
-            const row = 2 + index;
+        const getRowFromCell = (cell: string) => {
+            const match = cell.match(/\d+$/);
+            return match ? Number(match[0]) : 0;
+        };
+
+        const inputKeys = Object.keys(SHEET_MAPPING.inputs).filter(k => k !== 'sheetName');
+        inputKeys.forEach(key => {
+            const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
+            const row = getRowFromCell(cell);
+            if (!row) return;
             updates.push({
                 range: `'${inputSheetName}'!B${row}`,
-                values: [[label]],
+                values: [[key]],
             });
         });
 
@@ -86,6 +93,18 @@ export async function POST(req: Request) {
             }
         }
 
+        const outputSheetName = SHEET_MAPPING.outputs.sheetName;
+        const outputKeys = Object.keys(SHEET_MAPPING.outputs).filter(k => k !== 'sheetName');
+        outputKeys.forEach(key => {
+            const cell = SHEET_MAPPING.outputs[key as keyof typeof SHEET_MAPPING.outputs];
+            const row = getRowFromCell(cell);
+            if (!row) return;
+            updates.push({
+                range: `'${outputSheetName}'!B${row}`,
+                values: [[key]],
+            });
+        });
+
         if (updates.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
                 spreadsheetId,
@@ -97,8 +116,6 @@ export async function POST(req: Request) {
         }
 
         // 3. Read Outputs
-        const outputSheetName = SHEET_MAPPING.outputs.sheetName;
-        const outputKeys = Object.keys(SHEET_MAPPING.outputs).filter(k => k !== 'sheetName');
         const ranges = outputKeys.map(key => {
             const cell = SHEET_MAPPING.outputs[key as keyof typeof SHEET_MAPPING.outputs];
             return `'${outputSheetName}'!${cell}`;
