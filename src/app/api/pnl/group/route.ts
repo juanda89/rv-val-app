@@ -6,7 +6,7 @@ import { SHEET_NAMES } from '@/config/sheetMapping';
 export const runtime = 'nodejs';
 
 const GROUPING_MODEL = 'models/gemini-pro-latest';
-const VALIDATION_MODEL = 'models/gemini-pro';
+const VALIDATION_MODEL = 'models/gemini-pro-latest';
 
 const CATEGORIZATION_SHEET = SHEET_NAMES.CATEGORIZATION;
 
