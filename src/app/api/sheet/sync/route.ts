@@ -80,6 +80,12 @@ export async function POST(req: Request) {
             });
         });
 
+        // Clear legacy P&L rows (now handled in the categorization sheet).
+        updates.push({
+            range: `'${inputSheetName}'!B12:C26`,
+            values: Array.from({ length: 15 }, () => ['', '']),
+        });
+
         for (const [key, value] of Object.entries(mergedInputs)) {
             // Cast key to check if it exists in mapping
             const mappingKey = key as keyof typeof SHEET_MAPPING.inputs;

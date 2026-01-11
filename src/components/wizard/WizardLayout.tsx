@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ValuationUploadPanel } from '@/components/wizard/ValuationUploadPanel';
 import { BarChart3 } from 'lucide-react';
+import { PNL_LABELS } from '@/config/pnlMapping';
 
 const STEPS = [
     { id: 1, title: 'Property Basics', icon: 'domain' },
@@ -42,6 +43,29 @@ export const WizardLayout = ({
     const { sync, isSyncing } = useSheetSync(projectId || '');
     const isEmptyValue = (value: any) =>
         value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+    const createItemId = () => {
+        if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+            return crypto.randomUUID();
+        }
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    };
+    const normalizeName = (value: string) => value.trim().toLowerCase();
+    const parseAmount = (value: unknown) => {
+        if (value === null || value === undefined || value === '') return null;
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+        const cleaned = String(value).replace(/[$,]/g, '').trim();
+        const parsed = Number(cleaned);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+    const getPnlLabel = (key: string) => {
+        if (PNL_LABELS[key]) return PNL_LABELS[key];
+        const stripped = key.replace(/^revenue_/, '').replace(/^expense_/, '').replace(/_/g, ' ');
+        return stripped
+            .split(' ')
+            .filter(Boolean)
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    };
 
     // 2. Effects
     React.useEffect(() => {
@@ -91,15 +115,75 @@ export const WizardLayout = ({
     const handleAutofill = React.useCallback(async (extracted: Record<string, any>) => {
         if (!extracted || Object.keys(extracted).length === 0) return;
 
-        let updates: Record<string, any> = {};
+        const updates: Record<string, any> = {};
+        const incomeFromUpload: Array<{ id: string; name: string; amount: number }> = [];
+        const expenseFromUpload: Array<{ id: string; name: string; amount: number }> = [];
+        Object.entries(extracted).forEach(([key, value]) => {
+            if (key.startsWith('revenue_')) {
+                const amount = parseAmount(value);
+                if (amount !== null) {
+                    incomeFromUpload.push({ id: createItemId(), name: getPnlLabel(key), amount });
+                }
+                return;
+            }
+            if (key.startsWith('expense_')) {
+                const amount = parseAmount(value);
+                if (amount !== null) {
+                    expenseFromUpload.push({ id: createItemId(), name: getPnlLabel(key), amount });
+                }
+                return;
+            }
+            updates[key] = value;
+        });
+
         setFormData((prev: any) => {
             const next = { ...prev };
-            Object.entries(extracted).forEach(([key, value]) => {
+            Object.entries(updates).forEach(([key, value]) => {
                 if (isEmptyValue(next[key])) {
                     next[key] = value;
-                    updates[key] = value;
+                } else {
+                    delete updates[key];
                 }
             });
+
+            if (incomeFromUpload.length > 0) {
+                const existingIncome = Array.isArray(next.pnl_income_items)
+                    ? next.pnl_income_items
+                    : Array.isArray(next.income_items)
+                        ? next.income_items
+                        : [];
+                const existingNames = new Set(
+                    existingIncome
+                        .map((item: any) => (typeof item?.name === 'string' ? normalizeName(item.name) : ''))
+                        .filter(Boolean)
+                );
+                const newItems = incomeFromUpload.filter(
+                    item => !existingNames.has(normalizeName(item.name))
+                );
+                if (newItems.length > 0) {
+                    next.pnl_income_items = [...existingIncome, ...newItems];
+                }
+            }
+
+            if (expenseFromUpload.length > 0) {
+                const existingExpenses = Array.isArray(next.pnl_expense_items)
+                    ? next.pnl_expense_items
+                    : Array.isArray(next.expense_items)
+                        ? next.expense_items
+                        : [];
+                const existingNames = new Set(
+                    existingExpenses
+                        .map((item: any) => (typeof item?.name === 'string' ? normalizeName(item.name) : ''))
+                        .filter(Boolean)
+                );
+                const newItems = expenseFromUpload.filter(
+                    item => !existingNames.has(normalizeName(item.name))
+                );
+                if (newItems.length > 0) {
+                    next.pnl_expense_items = [...existingExpenses, ...newItems];
+                }
+            }
+
             return next;
         });
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { SHEET_MAPPING } from '@/config/sheetMapping';
+import { PNL_EXPENSE_KEYS, PNL_REVENUE_KEYS } from '@/config/pnlMapping';
 
 export const runtime = 'nodejs';
 
@@ -69,7 +70,8 @@ export async function POST(req: Request) {
         const arrayBuffer = await file.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString('base64');
 
-        const keys = Object.keys(SHEET_MAPPING.inputs).filter(key => key !== 'sheetName');
+        const generalKeys = Object.keys(SHEET_MAPPING.inputs).filter(key => key !== 'sheetName');
+        const keys = [...generalKeys, ...PNL_REVENUE_KEYS, ...PNL_EXPENSE_KEYS];
         const prompt = buildPrompt(keys);
 
         const response = await fetch(

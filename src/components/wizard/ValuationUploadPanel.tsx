@@ -29,7 +29,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
 
     const processFile = async (file: File) => {
         setStatus('loading');
-        setMessage('Uploading file and analyzing with Gemini...');
+        setMessage('Uploading file and analyzing with AI...');
         setFileName(file.name);
 
         try {
@@ -79,7 +79,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
                         <h3 className="text-lg font-semibold">Upload Documents</h3>
                     </div>
                     <p className="text-xs text-gray-400 mt-2">
-                        Drag & drop or upload supporting files. Gemini will extract data to auto-fill your valuation.
+                        Drag & drop or upload supporting files. AI will extract data to auto-fill your valuation.
                     </p>
                 </div>
 
@@ -125,7 +125,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
                             <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
                             <span>Uploading file...</span>
                         </div>
-                        <p>Gemini is analyzing the document.</p>
+                        <p>AI is analyzing the document.</p>
                         <p>Processing and structuring the extracted data.</p>
                     </div>
                 )}

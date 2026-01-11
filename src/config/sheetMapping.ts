@@ -23,25 +23,7 @@ export const SHEET_MAPPING = {
     occupied_lots: "C10",
     current_lot_rent: "C11",
 
-    // --- STEP 3: P&L (Categorized Data) ---
-    // REVENUE Categories (6 Total)
-    revenue_rental_income: "C12",
-    revenue_rv_income: "C13",
-    revenue_storage: "C14",
-    revenue_late_fees: "C15",
-    revenue_utility_reimb: "C16",
-    revenue_other: "C17",
-
-    // EXPENSE Categories (9 Total)
-    expense_payroll: "C18",
-    expense_utilities: "C19",
-    expense_rm: "C20",        // Repairs & Maintenance
-    expense_advertising: "C21",
-    expense_ga: "C22",        // General & Administrative
-    expense_insurance: "C23",
-    expense_re_taxes: "C24",
-    expense_mgmt_fee: "C25",
-    expense_reserves: "C26",
+    // --- STEP 3: P&L (handled in Income & Expenses Categorization sheet) ---
 
     // --- STEP 4: Taxes (ATTOM API + Manual Override) ---
     tax_assessment_rate: "C27",
