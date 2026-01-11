@@ -19,3 +19,7 @@ create policy "Users can view their own projects"
 create policy "Users can insert their own projects"
   on projects for insert
   with check (auth.uid() = user_id);
+
+create policy "Users can delete their own projects"
+  on projects for delete
+  using (auth.uid() = user_id);

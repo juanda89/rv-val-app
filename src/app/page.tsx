@@ -19,6 +19,36 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const hasMapsKey = Boolean(
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY &&
+    !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder')
+  );
+
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return 'NA';
+    const first = parts[0]?.[0] || '';
+    const second = parts.length > 1 ? parts[1]?.[0] || '' : parts[0]?.[1] || '';
+    return `${first}${second}`.toUpperCase();
+  };
+
+  const colorPalette = ['#0f766e', '#1d4ed8', '#7c2d12', '#166534', '#7c3aed', '#b91c1c'];
+  const getAvatarColor = (seed: string) => {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) {
+      hash = (hash << 5) - hash + seed.charCodeAt(i);
+      hash |= 0;
+    }
+    const index = Math.abs(hash) % colorPalette.length;
+    return colorPalette[index];
+  };
+
+  const getMapUrl = (address?: string) => {
+    if (!hasMapsKey || !address) return '';
+    const encodedAddress = encodeURIComponent(address);
+    return `https://maps.googleapis.com/maps/api/staticmap?center=${encodedAddress}&zoom=15&size=160x160&maptype=roadmap&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}`;
+  };
 
   useEffect(() => {
     const checkUser = async () => {
@@ -52,6 +82,36 @@ export default function DashboardPage() {
     else setProjects(data || []);
 
     setLoading(false);
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (!confirm('Delete this valuation? This will remove the Drive file and the project record.')) return;
+    setDeletingId(projectId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch('/api/projects/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({ projectId })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Delete failed');
+      }
+
+      setProjects(prev => prev.filter(project => project.id !== projectId));
+    } catch (error: any) {
+      console.error('Delete failed:', error);
+      alert(error.message || 'Delete failed');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (loading || !user) {
@@ -153,12 +213,30 @@ export default function DashboardPage() {
                   <tr><td colSpan={6} className="text-center p-8 text-gray-500">No projects found. Create one!</td></tr>
                 )}
                 {projects.map((project) => (
-                  <tr key={project.id} className="group hover:bg-slate-50 dark:hover:bg-[#1a262d] transition-colors">
+                  <tr
+                    key={project.id}
+                    className="group hover:bg-slate-50 dark:hover:bg-[#1a262d] transition-colors cursor-pointer"
+                    onClick={() => router.push(`/projects/create?projectId=${project.id}`)}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
-                        <div className="size-10 rounded-lg bg-cover bg-center shrink-0 border border-[#e5e7eb] dark:border-[#283339] bg-gray-700 flex items-center justify-center">
-                          <span className="material-symbols-outlined text-gray-400">forest</span>
-                        </div>
+                        {(() => {
+                          const mapUrl = getMapUrl(project.address);
+                          const initials = getInitials(project.name || 'NA');
+                          const fallbackColor = getAvatarColor(project.name || project.id);
+                          return (
+                            <div
+                              className="size-10 rounded-lg bg-cover bg-center shrink-0 border border-[#e5e7eb] dark:border-[#283339] flex items-center justify-center"
+                              style={
+                                mapUrl
+                                  ? { backgroundImage: `url("${mapUrl}")` }
+                                  : { backgroundColor: fallbackColor }
+                              }
+                            >
+                              {!mapUrl && <span className="text-xs font-bold text-white">{initials}</span>}
+                            </div>
+                          );
+                        })()}
                         <div>
                           <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#13a4ec] transition-colors">{project.name}</p>
                           <p className="text-xs text-slate-500">ID: #{project.id.slice(0, 8)}</p>
@@ -182,8 +260,16 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button className="text-slate-400 hover:text-[#13a4ec] transition-colors p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-[#283339]">
-                        <span className="material-symbols-outlined">more_vert</span>
+                      <button
+                        className="text-red-500 hover:text-red-400 transition-colors p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteProject(project.id);
+                        }}
+                        disabled={deletingId === project.id}
+                        aria-label="Delete valuation"
+                      >
+                        <span className="material-symbols-outlined">delete</span>
                       </button>
                     </td>
                   </tr>

@@ -5,8 +5,9 @@ export function useSheetSync(projectId: string) {
     const [isSyncing, setIsSyncing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const sync = useCallback(async (inputs: Record<string, any>) => {
-        if (!projectId) return null;
+    const sync = useCallback(async (inputs: Record<string, any>, overrideProjectId?: string) => {
+        const targetProjectId = overrideProjectId || projectId;
+        if (!targetProjectId) return null;
         setIsSyncing(true);
         setError(null);
 
@@ -20,7 +21,7 @@ export function useSheetSync(projectId: string) {
                     'Content-Type': 'application/json',
                     'Authorization': token ? `Bearer ${token}` : ''
                 },
-                body: JSON.stringify({ projectId, inputs }),
+                body: JSON.stringify({ projectId: targetProjectId, inputs }),
             });
 
             const data = await response.json();

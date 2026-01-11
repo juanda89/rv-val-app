@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { useSheetSync } from '@/hooks/useSheetSync';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation';
 
 const STEPS = [
     { id: 1, title: 'Property Basics', icon: 'domain' },
@@ -18,13 +19,22 @@ const STEPS = [
     { id: 5, title: 'Results', icon: 'analytics' },
 ];
 
-export const WizardLayout = ({ user }: { user?: any }) => {
+export const WizardLayout = ({
+    user,
+    initialProjectId,
+    initialData
+}: {
+    user?: any;
+    initialProjectId?: string | null;
+    initialData?: any;
+}) => {
+    const router = useRouter();
     // 1. All hooks must run first
     const [mounted, setMounted] = useState(false);
     const [currentStep, setCurrentStep] = useState(1);
-    const [formData, setFormData] = useState<any>({});
+    const [formData, setFormData] = useState<any>(initialData || {});
     const [outputs, setOutputs] = useState<any>(null); // Store sync results
-    const [projectId, setProjectId] = useState<string | null>(null);
+    const [projectId, setProjectId] = useState<string | null>(initialProjectId || null);
     const [creatingProject, setCreatingProject] = useState(false);
     const { sync, isSyncing } = useSheetSync(projectId || '');
 
@@ -32,6 +42,16 @@ export const WizardLayout = ({ user }: { user?: any }) => {
     React.useEffect(() => {
         setMounted(true);
     }, []);
+
+    React.useEffect(() => {
+        if (initialProjectId) setProjectId(initialProjectId);
+    }, [initialProjectId]);
+
+    React.useEffect(() => {
+        if (initialData) {
+            setFormData((prev: any) => ({ ...prev, ...initialData }));
+        }
+    }, [initialData]);
 
     // 3. Conditional Rendering (after all hooks)
     // if (!mounted) return null; // Prevent hydration mismatch -- REMOVED to avoid hook mismatch in Next 15/React 18 stricter dev mode
@@ -87,10 +107,12 @@ export const WizardLayout = ({ user }: { user?: any }) => {
                 const json = await res.json();
 
                 if (json.project?.id) {
-                    setProjectId(json.project.id);
+                    const newProjectId = json.project.id as string;
+                    setProjectId(newProjectId);
                     // Sync the initial data
-                    const results = await sync(data);
+                    const results = await sync(data, newProjectId);
                     if (results) setOutputs(results);
+                    setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
                 } else if (json.error) {
                     console.error('Project creation error:', json.error);
                     alert(`Error creating project: ${json.error}`);
@@ -104,7 +126,13 @@ export const WizardLayout = ({ user }: { user?: any }) => {
         handleDataChange(data);
     };
 
-    const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
+    const nextStep = async () => {
+        if (currentStep === 1 && !projectId) {
+            await handleStep1Complete(formData);
+            return;
+        }
+        setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
+    };
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
     if (!mounted) {
@@ -152,7 +180,13 @@ export const WizardLayout = ({ user }: { user?: any }) => {
                 <header className="h-16 border-b border-[#283339] flex items-center justify-between px-8 bg-[#111618]/95 backdrop-blur sticky top-0 z-10">
                     <h2 className="text-lg font-semibold">{STEPS[currentStep - 1].title}</h2>
                     <div className="flex gap-4">
-                        <Button variant="ghost" className="text-gray-400" onClick={prevStep} disabled={currentStep === 1}>Back</Button>
+                        {currentStep === 1 && !projectId ? (
+                            <Button variant="ghost" className="text-gray-400" onClick={() => router.push('/')}>
+                                Cancel
+                            </Button>
+                        ) : (
+                            <Button variant="ghost" className="text-gray-400" onClick={prevStep} disabled={currentStep === 1}>Back</Button>
+                        )}
                         {currentStep < 5 && (
                             <Button
                                 onClick={nextStep}
@@ -165,7 +199,7 @@ export const WizardLayout = ({ user }: { user?: any }) => {
                 </header>
 
                 <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
-                    {currentStep === 1 && <Step1Location onDataChange={handleStep1Complete} initialData={formData} />}
+                    {currentStep === 1 && <Step1Location onDataChange={handleDataChange} initialData={formData} />}
                     {currentStep === 2 && <Step2RentRoll onDataChange={handleDataChange} initialData={formData} />}
                     {currentStep === 3 && <Step3PnL onDataChange={handleDataChange} initialData={formData} />}
                     {currentStep === 4 && <Step4Taxes onDataChange={handleDataChange} initialData={formData} address={formData.address} />}
