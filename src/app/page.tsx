@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
@@ -20,10 +20,18 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [locationFilter, setLocationFilter] = useState('all');
+  const [dateSort, setDateSort] = useState('newest');
+  const [layout, setLayout] = useState<'table' | 'grid'>('table');
+  const [currentPage, setCurrentPage] = useState(1);
   const hasMapsKey = Boolean(
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY &&
     !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder')
   );
+  const pageSize = 25;
 
   const getInitials = (name: string) => {
     const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -48,6 +56,34 @@ export default function DashboardPage() {
     if (!hasMapsKey || !address) return '';
     const encodedAddress = encodeURIComponent(address);
     return `https://maps.googleapis.com/maps/api/staticmap?center=${encodedAddress}&zoom=15&size=160x160&maptype=roadmap&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}`;
+  };
+
+  const getLocationParts = (address?: string) => {
+    if (!address) return { city: '', state: '', country: '' };
+    const parts = address
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean);
+
+    if (parts.length >= 3) {
+      const country = parts[parts.length - 1] || '';
+      const state = parts[parts.length - 2] || '';
+      const city = parts[parts.length - 3] || '';
+      return { city, state, country };
+    }
+
+    if (parts.length === 2) {
+      return { city: parts[0] || '', state: parts[1] || '', country: '' };
+    }
+
+    return { city: parts[0] || '', state: '', country: '' };
+  };
+
+  const formatLocation = (address?: string) => {
+    const { city, state, country } = getLocationParts(address);
+    const trailing = [state, country].filter(Boolean).join(', ');
+    const formatted = [city, trailing].filter(Boolean).join(' · ');
+    return formatted || 'Unknown';
   };
 
   useEffect(() => {
@@ -83,6 +119,48 @@ export default function DashboardPage() {
 
     setLoading(false);
   };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter, locationFilter, dateSort]);
+
+  const filteredProjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    const normalized = projects.filter(project => {
+      const name = (project.name || '').toLowerCase();
+      const address = (project.address || '').toLowerCase();
+      const { city } = getLocationParts(project.address || '');
+      const cityValue = city.toLowerCase();
+
+      const matchesQuery = !query || name.includes(query) || address.includes(query) || cityValue.includes(query);
+      const statusValue = (project.status || 'active').toLowerCase();
+      const matchesStatus = statusFilter === 'all' || statusValue === statusFilter;
+      const matchesLocation = locationFilter === 'all' || city === locationFilter;
+
+      return matchesQuery && matchesStatus && matchesLocation;
+    });
+
+    const sorted = normalized.slice().sort((a, b) => {
+      const aDate = new Date(a.created_at).getTime();
+      const bDate = new Date(b.created_at).getTime();
+      return dateSort === 'oldest' ? aDate - bDate : bDate - aDate;
+    });
+
+    return sorted;
+  }, [projects, searchQuery, statusFilter, locationFilter, dateSort]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / pageSize));
+  const paginatedProjects = filteredProjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const locationOptions = useMemo(() => {
+    const citySet = new Set<string>();
+    projects.forEach(project => {
+      const { city } = getLocationParts(project.address || '');
+      if (city) citySet.add(city);
+    });
+    return Array.from(citySet).sort((a, b) => a.localeCompare(b));
+  }, [projects]);
 
   const handleDeleteProject = async (projectId: string) => {
     if (!confirm('Delete this valuation? This will remove the Drive file and the project record.')) return;
@@ -129,19 +207,16 @@ export default function DashboardPage() {
     <div className="bg-[#f6f7f8] dark:bg-[#101c22] text-slate-900 dark:text-white font-sans min-h-screen flex flex-col overflow-x-hidden">
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#101c22] px-6 py-3 lg:px-10">
-        <div className="flex items-center gap-4 text-slate-900 dark:text-white">
+        <Link href="/" className="flex items-center gap-4 text-slate-900 dark:text-white hover:opacity-90">
           <div className="size-8 flex items-center justify-center bg-[#13a4ec]/20 rounded-lg text-[#13a4ec]">
             <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>analytics</span>
           </div>
           <h2 className="text-lg font-bold leading-tight tracking-[-0.015em]">RV Valuations</h2>
-        </div>
+        </Link>
         {/* Desktop Nav Links */}
         <div className="hidden md:flex flex-1 justify-end gap-8">
           <nav className="flex items-center gap-6 lg:gap-9">
-            <a className="text-slate-600 dark:text-slate-300 hover:text-[#13a4ec] dark:hover:text-[#13a4ec] text-sm font-medium leading-normal transition-colors" href="#">Dashboard</a>
-            <a className="text-[#13a4ec] text-sm font-medium leading-normal" href="#">Valuations</a>
-            <a className="text-slate-600 dark:text-slate-300 hover:text-[#13a4ec] dark:hover:text-[#13a4ec] text-sm font-medium leading-normal transition-colors" href="#">Market Data</a>
-            <a className="text-slate-600 dark:text-slate-300 hover:text-[#13a4ec] dark:hover:text-[#13a4ec] text-sm font-medium leading-normal transition-colors" href="#">Settings</a>
+            <Link className="text-[#13a4ec] text-sm font-medium leading-normal" href="/">Valuations</Link>
           </nav>
           <div className="flex items-center gap-3 pl-4 border-l border-[#e5e7eb] dark:border-[#283339]">
             <div className="flex flex-col items-end hidden lg:flex">
@@ -170,7 +245,7 @@ export default function DashboardPage() {
           <Link href="/projects/create">
             <button className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#13a4ec] hover:bg-sky-500 text-white rounded-lg shadow-lg shadow-[#13a4ec]/20 transition-all active:scale-95 group">
               <span className="material-symbols-outlined font-bold group-hover:rotate-90 transition-transform">add</span>
-              <span className="font-bold text-sm">New Valuation</span>
+              <span className="font-bold text-sm">+ New Valuation</span>
             </button>
           </Link>
         </div>
@@ -191,95 +266,382 @@ export default function DashboardPage() {
           {/* ... other stats omitted for brevity / static content */}
         </div>
 
-        {/* Data Display (Table) */}
-        <div className="rounded-xl border border-[#e5e7eb] dark:border-[#283339] overflow-hidden bg-white dark:bg-[#1c2930] shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-[#e5e7eb] dark:border-[#283339] bg-slate-50 dark:bg-[#152026]">
-                  <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Park Name</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Location</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Date Created</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Valuation</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#e5e7eb] dark:divide-[#283339]">
-                {loading && (
-                  <tr><td colSpan={6} className="text-center p-8 text-gray-500">Loading projects...</td></tr>
-                )}
-                {!loading && projects.length === 0 && (
-                  <tr><td colSpan={6} className="text-center p-8 text-gray-500">No projects found. Create one!</td></tr>
-                )}
-                {projects.map((project) => (
-                  <tr
-                    key={project.id}
-                    className="group hover:bg-slate-50 dark:hover:bg-[#1a262d] transition-colors cursor-pointer"
-                    onClick={() => router.push(`/projects/create?projectId=${project.id}`)}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-3">
-                        {(() => {
-                          const mapUrl = getMapUrl(project.address);
-                          const initials = getInitials(project.name || 'NA');
-                          const fallbackColor = getAvatarColor(project.name || project.id);
-                          return (
-                            <div
-                              className="size-10 rounded-lg bg-cover bg-center shrink-0 border border-[#e5e7eb] dark:border-[#283339] flex items-center justify-center"
-                              style={
-                                mapUrl
-                                  ? { backgroundImage: `url("${mapUrl}")` }
-                                  : { backgroundColor: fallbackColor }
-                              }
-                            >
-                              {!mapUrl && <span className="text-xs font-bold text-white">{initials}</span>}
+        {/* Pending Reports */}
+        <div className="rounded-2xl border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] p-6 shadow-sm">
+          <div className="flex items-center gap-3 text-slate-900 dark:text-white">
+            <span className="material-symbols-outlined text-[#13a4ec]">pending_actions</span>
+            <h3 className="text-lg font-bold">Pending Reports</h3>
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="rounded-xl border border-[#e5e7eb] dark:border-[#283339] p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>percent</span>
+                  Average Cap Rate
+                </p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2">--</p>
+              </div>
+              <span className="material-symbols-outlined text-slate-300 dark:text-slate-600">analytics</span>
+            </div>
+            <div className="rounded-xl border border-[#e5e7eb] dark:border-[#283339] p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>account_balance</span>
+                  Total Asset Value
+                </p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2">--</p>
+              </div>
+              <span className="material-symbols-outlined text-slate-300 dark:text-slate-600">paid</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="rounded-2xl border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] p-6 shadow-sm">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[#13a4ec]">tune</span>
+                <h3 className="text-lg font-bold">Filters</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLayout('table')}
+                  className={`px-3 py-2 rounded-lg text-xs font-semibold border ${layout === 'table' ? 'bg-[#13a4ec] text-white border-[#13a4ec]' : 'border-[#e5e7eb] dark:border-[#283339] text-slate-500 dark:text-slate-400'}`}
+                >
+                  <span className="material-symbols-outlined text-sm align-middle mr-1">table_rows</span>
+                  Table
+                </button>
+                <button
+                  onClick={() => setLayout('grid')}
+                  className={`px-3 py-2 rounded-lg text-xs font-semibold border ${layout === 'grid' ? 'bg-[#13a4ec] text-white border-[#13a4ec]' : 'border-[#e5e7eb] dark:border-[#283339] text-slate-500 dark:text-slate-400'}`}
+                >
+                  <span className="material-symbols-outlined text-sm align-middle mr-1">grid_view</span>
+                  Grid
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+              <div className="lg:col-span-2">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>search</span>
+                  Search by name or city
+                </label>
+                <input
+                  value={searchQuery}
+                  onChange={event => setSearchQuery(event.target.value)}
+                  placeholder="Search valuations..."
+                  className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-transparent px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#13a4ec]"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>flag</span>
+                  Status
+                </label>
+                <select
+                  value={statusFilter}
+                  onChange={event => setStatusFilter(event.target.value)}
+                  className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-transparent px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#13a4ec]"
+                >
+                  <option value="all">All</option>
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>location_on</span>
+                  Location
+                </label>
+                <select
+                  value={locationFilter}
+                  onChange={event => setLocationFilter(event.target.value)}
+                  className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-transparent px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#13a4ec]"
+                >
+                  <option value="all">All</option>
+                  {locationOptions.map(city => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>calendar_month</span>
+                  Date
+                </label>
+                <select
+                  value={dateSort}
+                  onChange={event => setDateSort(event.target.value)}
+                  className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-transparent px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#13a4ec]"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Data Display */}
+        <div className="rounded-xl border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] shadow-sm">
+          {layout === 'table' ? (
+            <div className="overflow-hidden">
+              <table className="w-full table-fixed text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-[#e5e7eb] dark:border-[#283339] bg-slate-50 dark:bg-[#152026]">
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[28%]">
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>domain</span>
+                        Park Name
+                      </span>
+                    </th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[18%]">
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>location_on</span>
+                        Location
+                      </span>
+                    </th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[14%]">
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>calendar_month</span>
+                        Date Created
+                      </span>
+                    </th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[12%]">
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>paid</span>
+                        Valuation
+                      </span>
+                    </th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[10%]">
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>percent</span>
+                        Cap Rate
+                      </span>
+                    </th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[10%]">
+                      <span className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>check_circle</span>
+                        Status
+                      </span>
+                    </th>
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right w-[8%]">
+                      <span className="flex items-center justify-end gap-2">
+                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>more_vert</span>
+                        Actions
+                      </span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#e5e7eb] dark:divide-[#283339]">
+                  {loading && (
+                    <tr><td colSpan={7} className="text-center p-8 text-gray-500">Loading projects...</td></tr>
+                  )}
+                  {!loading && filteredProjects.length === 0 && (
+                    <tr><td colSpan={7} className="text-center p-8 text-gray-500">No projects found. Create one!</td></tr>
+                  )}
+                  {paginatedProjects.map((project) => (
+                    <tr
+                      key={project.id}
+                      className="group hover:bg-slate-50 dark:hover:bg-[#1a262d] transition-colors cursor-pointer"
+                      onClick={() => router.push(`/projects/create?projectId=${project.id}`)}
+                    >
+                      <td className="px-6 py-4 align-top">
+                        <div className="flex items-center gap-3">
+                          {(() => {
+                            const mapUrl = getMapUrl(project.address);
+                            const initials = getInitials(project.name || 'NA');
+                            const fallbackColor = getAvatarColor(project.name || project.id);
+                            return (
+                              <div
+                                className="size-10 rounded-lg bg-cover bg-center shrink-0 border border-[#e5e7eb] dark:border-[#283339] flex items-center justify-center"
+                                style={
+                                  mapUrl
+                                    ? { backgroundImage: `url("${mapUrl}")` }
+                                    : { backgroundColor: fallbackColor }
+                                }
+                              >
+                                {!mapUrl && <span className="text-xs font-bold text-white">{initials}</span>}
+                              </div>
+                            );
+                          })()}
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#13a4ec] transition-colors break-words">{project.name}</p>
+                            <p className="text-xs text-slate-500">ID: #{project.id.slice(0, 8)}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 align-top">
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>location_on</span>
+                          <span className="text-sm text-slate-700 dark:text-slate-300 break-words">{formatLocation(project.address)}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 align-top text-sm text-slate-600 dark:text-slate-400">{formatDate(project.created_at)}</td>
+                      <td className="px-6 py-4 align-top">
+                        <span className="text-sm font-bold text-slate-900 dark:text-white">--</span>
+                      </td>
+                      <td className="px-6 py-4 align-top">
+                        <span className="text-sm font-bold text-slate-900 dark:text-white">--</span>
+                      </td>
+                      <td className="px-6 py-4 align-top">
+                        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+                          <span className="size-1.5 rounded-full bg-emerald-500"></span>
+                          {project.status || 'Active'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 align-top text-right">
+                        <div className="relative inline-flex" onClick={event => event.stopPropagation()}>
+                          <button
+                            className="text-slate-400 hover:text-[#13a4ec] transition-colors p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-[#283339]"
+                            onClick={() => setOpenMenuId(prev => (prev === project.id ? null : project.id))}
+                            aria-label="Project actions"
+                          >
+                            <span className="material-symbols-outlined">more_vert</span>
+                          </button>
+                          {openMenuId === project.id && (
+                            <div className="absolute right-0 mt-2 w-36 rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] shadow-lg z-10">
+                              <button
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setOpenMenuId(null);
+                                  handleDeleteProject(project.id);
+                                }}
+                                disabled={deletingId === project.id}
+                              >
+                                <span className="material-symbols-outlined text-sm">delete</span>
+                                Delete
+                              </button>
                             </div>
-                          );
-                        })()}
-                        <div>
-                          <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#13a4ec] transition-colors">{project.name}</p>
-                          <p className="text-xs text-slate-500">ID: #{project.id.slice(0, 8)}</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-6">
+              {filteredProjects.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">No projects found. Create one!</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {paginatedProjects.map(project => {
+                    const mapUrl = getMapUrl(project.address);
+                    const initials = getInitials(project.name || 'NA');
+                    const fallbackColor = getAvatarColor(project.name || project.id);
+                    return (
+                      <div
+                        key={project.id}
+                        className="rounded-xl border border-[#e5e7eb] dark:border-[#283339] p-4 hover:bg-slate-50 dark:hover:bg-[#1a262d] transition-colors cursor-pointer"
+                        onClick={() => router.push(`/projects/create?projectId=${project.id}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="size-12 rounded-lg bg-cover bg-center shrink-0 border border-[#e5e7eb] dark:border-[#283339] flex items-center justify-center"
+                            style={
+                              mapUrl
+                                ? { backgroundImage: `url("${mapUrl}")` }
+                                : { backgroundColor: fallbackColor }
+                            }
+                          >
+                            {!mapUrl && <span className="text-sm font-bold text-white">{initials}</span>}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-base font-bold text-slate-900 dark:text-white break-words">{project.name}</p>
+                            <p className="text-xs text-slate-500">ID: #{project.id.slice(0, 8)}</p>
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>location_on</span>
+                            <span>{formatLocation(project.address)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>calendar_month</span>
+                            <span>{formatDate(project.created_at)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>paid</span>
+                            <span>--</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>percent</span>
+                            <span>--</span>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex items-center justify-between">
+                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+                            <span className="size-1.5 rounded-full bg-emerald-500"></span>
+                            {project.status || 'Active'}
+                          </span>
+                          <div className="relative" onClick={event => event.stopPropagation()}>
+                            <button
+                              className="text-slate-400 hover:text-[#13a4ec] transition-colors p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-[#283339]"
+                              onClick={() => setOpenMenuId(prev => (prev === project.id ? null : project.id))}
+                              aria-label="Project actions"
+                            >
+                              <span className="material-symbols-outlined">more_vert</span>
+                            </button>
+                            {openMenuId === project.id && (
+                              <div className="absolute right-0 mt-2 w-36 rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] shadow-lg z-10">
+                                <button
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setOpenMenuId(null);
+                                    handleDeleteProject(project.id);
+                                  }}
+                                  disabled={deletingId === project.id}
+                                >
+                                  <span className="material-symbols-outlined text-sm">delete</span>
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>location_on</span>
-                        <span className="text-sm text-slate-700 dark:text-slate-300">{project.address || 'Unknown'}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">{formatDate(project.created_at)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-bold text-slate-900 dark:text-white">--</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
-                        <span className="size-1.5 rounded-full bg-emerald-500"></span>
-                        {project.status || 'Active'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        className="text-red-500 hover:text-red-400 transition-colors p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleDeleteProject(project.id);
-                        }}
-                        disabled={deletingId === project.id}
-                        aria-label="Delete valuation"
-                      >
-                        <span className="material-symbols-outlined">delete</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {/* Pagination Static */}
-          <div className="px-6 py-4 border-t border-[#e5e7eb] dark:border-[#283339] flex items-center justify-between">
-            <p className="text-sm text-slate-500 dark:text-slate-400">Showing <span className="font-medium text-slate-900 dark:text-white">1</span> to <span className="font-medium text-slate-900 dark:text-white">{projects.length}</span> of <span className="font-medium text-slate-900 dark:text-white">{projects.length}</span> results</p>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="px-6 py-4 border-t border-[#e5e7eb] dark:border-[#283339] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Showing{' '}
+              <span className="font-medium text-slate-900 dark:text-white">
+                {filteredProjects.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+              </span>{' '}
+              to{' '}
+              <span className="font-medium text-slate-900 dark:text-white">
+                {Math.min(currentPage * pageSize, filteredProjects.length)}
+              </span>{' '}
+              of{' '}
+              <span className="font-medium text-slate-900 dark:text-white">{filteredProjects.length}</span>{' '}
+              results
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                className="px-3 py-2 rounded-lg border border-[#e5e7eb] dark:border-[#283339] text-xs font-semibold text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#283339] disabled:opacity-50"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                Prev
+              </button>
+              <span className="text-xs text-slate-500 dark:text-slate-400">Page {currentPage} of {totalPages}</span>
+              <button
+                className="px-3 py-2 rounded-lg border border-[#e5e7eb] dark:border-[#283339] text-xs font-semibold text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#283339] disabled:opacity-50"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </main>

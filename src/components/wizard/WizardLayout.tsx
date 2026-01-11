@@ -10,6 +10,7 @@ import { useSheetSync } from '@/hooks/useSheetSync';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 const STEPS = [
     { id: 1, title: 'Property Basics', icon: 'domain' },
@@ -143,10 +144,10 @@ export const WizardLayout = ({
         <div className="flex min-h-screen bg-[#111618] text-white">
             {/* Sidebar */}
             <div className="w-64 border-r border-[#283339] hidden md:flex flex-col p-6 sticky top-0 h-screen">
-                <div className="flex items-center gap-2 mb-8">
-                    <span className="material-symbols-outlined text-blue-500 text-2xl">rv_hookup</span>
-                    <h1 className="font-bold text-xl">ValuParks</h1>
-                </div>
+                <Link href="/" className="flex items-center gap-2 mb-8 hover:opacity-90">
+                    <span className="material-symbols-outlined text-blue-500 text-2xl">analytics</span>
+                    <h1 className="font-bold text-xl">RV Valuations</h1>
+                </Link>
 
                 <nav className="space-y-2">
                     {STEPS.map(step => (
