@@ -24,6 +24,22 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
         onDataChange(data);
     }, [data, onDataChange]);
 
+    useEffect(() => {
+        const next = {
+            tax_assessment_rate: initialData?.tax_assessment_rate || '',
+            tax_millage_rate: initialData?.tax_millage_rate || '',
+            tax_prev_year_amount: initialData?.tax_prev_year_amount || '',
+        };
+        const hasChanges =
+            next.tax_assessment_rate !== data.tax_assessment_rate ||
+            next.tax_millage_rate !== data.tax_millage_rate ||
+            next.tax_prev_year_amount !== data.tax_prev_year_amount;
+
+        if (hasChanges) {
+            setData(next);
+        }
+    }, [initialData?.tax_assessment_rate, initialData?.tax_millage_rate, initialData?.tax_prev_year_amount, data]);
+
     const fetchAttomData = async () => {
         if (!address) return;
         setLoading(true);

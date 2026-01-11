@@ -250,8 +250,8 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        {/* Stats Grid - Static for demo */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
               <span className="material-symbols-outlined text-[#13a4ec]" style={{ fontSize: '20px' }}>folder_open</span>
@@ -263,36 +263,38 @@ export default function DashboardPage() {
               +2 this month
             </p>
           </div>
-          {/* ... other stats omitted for brevity / static content */}
-        </div>
-
-        {/* Pending Reports */}
-        <div className="rounded-2xl border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] p-6 shadow-sm">
-          <div className="flex items-center gap-3 text-slate-900 dark:text-white">
-            <span className="material-symbols-outlined text-[#13a4ec]">pending_actions</span>
-            <h3 className="text-lg font-bold">Pending Reports</h3>
+          <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+              <span className="material-symbols-outlined text-[#13a4ec]" style={{ fontSize: '20px' }}>more_horiz</span>
+              <p className="text-sm font-medium">Pending Reports</p>
+            </div>
+            <p className="text-3xl font-bold tracking-tight">--</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>info</span>
+              Requires attention
+            </p>
           </div>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-[#e5e7eb] dark:border-[#283339] p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>percent</span>
-                  Average Cap Rate
-                </p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2">--</p>
-              </div>
-              <span className="material-symbols-outlined text-slate-300 dark:text-slate-600">analytics</span>
+          <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+              <span className="material-symbols-outlined text-[#13a4ec]" style={{ fontSize: '20px' }}>percent</span>
+              <p className="text-sm font-medium">Average Cap Rate</p>
             </div>
-            <div className="rounded-xl border border-[#e5e7eb] dark:border-[#283339] p-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>account_balance</span>
-                  Total Asset Value
-                </p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2">--</p>
-              </div>
-              <span className="material-symbols-outlined text-slate-300 dark:text-slate-600">paid</span>
+            <p className="text-3xl font-bold tracking-tight">--</p>
+            <p className="text-xs text-green-500 font-medium flex items-center gap-1">
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>trending_up</span>
+              +0.4% vs last year
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+              <span className="material-symbols-outlined text-[#13a4ec]" style={{ fontSize: '20px' }}>attach_money</span>
+              <p className="text-sm font-medium">Total Asset Value</p>
             </div>
+            <p className="text-3xl font-bold tracking-tight">--</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>stacked_line_chart</span>
+              Across all properties
+            </p>
           </div>
         </div>
 

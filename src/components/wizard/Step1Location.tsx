@@ -54,6 +54,18 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
     const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(initialData?.lat ? { lat: initialData.lat, lng: initialData.lng } : null);
     const [projectName, setProjectName] = useState(initialData?.name || '');
 
+    React.useEffect(() => {
+        if (typeof initialData?.name === 'string') {
+            setProjectName(initialData.name);
+        }
+        if (typeof initialData?.address === 'string') {
+            setValue(initialData.address, false);
+        }
+        if (initialData?.lat && initialData?.lng) {
+            setCoordinates({ lat: initialData.lat, lng: initialData.lng });
+        }
+    }, [initialData?.name, initialData?.address, initialData?.lat, initialData?.lng, setValue]);
+
     const handleSelect = async (address: string) => {
         setValue(address, false);
         clearSuggestions();
@@ -153,6 +165,15 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
     const hasApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder');
     const [manualName, setManualName] = React.useState(initialData?.name || '');
     const [manualAddress, setManualAddress] = React.useState(initialData?.address || '');
+
+    React.useEffect(() => {
+        if (typeof initialData?.name === 'string') {
+            setManualName(initialData.name);
+        }
+        if (typeof initialData?.address === 'string') {
+            setManualAddress(initialData.address);
+        }
+    }, [initialData?.name, initialData?.address]);
 
     if (!hasApiKey) {
         return (

@@ -11,6 +11,7 @@ import { Dashboard } from '@/components/dashboard/Dashboard';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ValuationUploadPanel } from '@/components/wizard/ValuationUploadPanel';
 
 const STEPS = [
     { id: 1, title: 'Property Basics', icon: 'domain' },
@@ -38,6 +39,8 @@ export const WizardLayout = ({
     const [projectId, setProjectId] = useState<string | null>(initialProjectId || null);
     const [creatingProject, setCreatingProject] = useState(false);
     const { sync, isSyncing } = useSheetSync(projectId || '');
+    const isEmptyValue = (value: any) =>
+        value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
 
     // 2. Effects
     React.useEffect(() => {
@@ -81,6 +84,26 @@ export const WizardLayout = ({
             await sync(stepData).then(results => {
                 if (results) setOutputs((prev: any) => ({ ...prev, ...results }));
             });
+        }
+    }, [projectId, sync]);
+
+    const handleAutofill = React.useCallback(async (extracted: Record<string, any>) => {
+        if (!extracted || Object.keys(extracted).length === 0) return;
+
+        let updates: Record<string, any> = {};
+        setFormData((prev: any) => {
+            const next = { ...prev };
+            Object.entries(extracted).forEach(([key, value]) => {
+                if (isEmptyValue(next[key])) {
+                    next[key] = value;
+                    updates[key] = value;
+                }
+            });
+            return next;
+        });
+
+        if (projectId && Object.keys(updates).length > 0) {
+            await sync(updates);
         }
     }, [projectId, sync]);
 
@@ -176,36 +199,40 @@ export const WizardLayout = ({
                 </div>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 flex flex-col">
-                <header className="h-16 border-b border-[#283339] flex items-center justify-between px-8 bg-[#111618]/95 backdrop-blur sticky top-0 z-10">
-                    <h2 className="text-lg font-semibold">{STEPS[currentStep - 1].title}</h2>
-                    <div className="flex gap-4">
-                        {currentStep === 1 && !projectId ? (
-                            <Button variant="ghost" className="text-gray-400" onClick={() => router.push('/')}>
-                                Cancel
-                            </Button>
-                        ) : (
-                            <Button variant="ghost" className="text-gray-400" onClick={prevStep} disabled={currentStep === 1}>Back</Button>
-                        )}
-                        {currentStep < 5 && (
-                            <Button
-                                onClick={nextStep}
-                                disabled={currentStep === STEPS.length || (!projectId && currentStep === 1 && !formData.address)}
-                            >
-                                {creatingProject ? "Creating..." : "Next"}
-                            </Button>
-                        )}
-                    </div>
-                </header>
+            <div className="flex-1 flex flex-col lg:flex-row">
+                <ValuationUploadPanel onAutofill={handleAutofill} />
 
-                <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
-                    {currentStep === 1 && <Step1Location onDataChange={handleDataChange} initialData={formData} />}
-                    {currentStep === 2 && <Step2RentRoll onDataChange={handleDataChange} initialData={formData} />}
-                    {currentStep === 3 && <Step3PnL onDataChange={handleDataChange} initialData={formData} />}
-                    {currentStep === 4 && <Step4Taxes onDataChange={handleDataChange} initialData={formData} address={formData.address} />}
-                    {currentStep === 5 && <Dashboard outputs={outputs} inputs={formData} onInputChange={handleDataChange} />}
-                </main>
+                {/* Main Content */}
+                <div className="flex-1 flex flex-col">
+                    <header className="h-16 border-b border-[#283339] flex items-center justify-between px-8 bg-[#111618]/95 backdrop-blur sticky top-0 z-10">
+                        <h2 className="text-lg font-semibold">{STEPS[currentStep - 1].title}</h2>
+                        <div className="flex gap-4">
+                            {currentStep === 1 && !projectId ? (
+                                <Button variant="ghost" className="text-gray-400" onClick={() => router.push('/')}>
+                                    Cancel
+                                </Button>
+                            ) : (
+                                <Button variant="ghost" className="text-gray-400" onClick={prevStep} disabled={currentStep === 1}>Back</Button>
+                            )}
+                            {currentStep < 5 && (
+                                <Button
+                                    onClick={nextStep}
+                                    disabled={currentStep === STEPS.length || (!projectId && currentStep === 1 && !formData.address)}
+                                >
+                                    {creatingProject ? "Creating..." : "Next"}
+                                </Button>
+                            )}
+                        </div>
+                    </header>
+
+                    <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
+                        {currentStep === 1 && <Step1Location onDataChange={handleDataChange} initialData={formData} />}
+                        {currentStep === 2 && <Step2RentRoll onDataChange={handleDataChange} initialData={formData} />}
+                        {currentStep === 3 && <Step3PnL onDataChange={handleDataChange} initialData={formData} />}
+                        {currentStep === 4 && <Step4Taxes onDataChange={handleDataChange} initialData={formData} address={formData.address} />}
+                        {currentStep === 5 && <Dashboard outputs={outputs} inputs={formData} onInputChange={handleDataChange} />}
+                    </main>
+                </div>
             </div>
         </div>
     );
