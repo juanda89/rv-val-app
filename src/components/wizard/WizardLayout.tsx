@@ -229,7 +229,7 @@ export const WizardLayout = ({
                     <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
                         {currentStep === 1 && <Step1Location onDataChange={handleDataChange} initialData={formData} />}
                         {currentStep === 2 && <Step2RentRoll onDataChange={handleDataChange} initialData={formData} />}
-                        {currentStep === 3 && <Step3PnL onDataChange={handleDataChange} initialData={formData} />}
+                    {currentStep === 3 && <Step3PnL onDataChange={handleDataChange} initialData={formData} projectId={projectId} />}
                         {currentStep === 4 && <Step4Taxes onDataChange={handleDataChange} initialData={formData} address={formData.address} />}
                         {currentStep === 5 && <Dashboard outputs={outputs} inputs={formData} onInputChange={handleDataChange} />}
                     </main>

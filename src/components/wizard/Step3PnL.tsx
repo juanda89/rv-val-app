@@ -1,191 +1,368 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
-import * as XLSX from 'xlsx';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from "@/components/ui/Button";
-import { SHEET_MAPPING } from "@/config/sheetMapping";
+import { supabase } from '@/lib/supabaseClient';
+
+interface PnlItem {
+    id: string;
+    name: string;
+    amount: number;
+}
+
+interface GroupedItem {
+    category: string;
+    total: number;
+}
 
 interface Step3Props {
     onDataChange: (data: any) => void;
     initialData?: any;
+    projectId?: string | null;
 }
 
-// Extract categories from config
-const REVENUE_CATEGORIES = Object.keys(SHEET_MAPPING.inputs)
-    .filter(k => k.startsWith('revenue_'))
-    .map(k => ({ value: k, label: k.replace('revenue_', '').replace(/_/g, ' ').toUpperCase() }));
+const createId = () => {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+        return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
 
-const EXPENSE_CATEGORIES = Object.keys(SHEET_MAPPING.inputs)
-    .filter(k => k.startsWith('expense_'))
-    .map(k => ({ value: k, label: k.replace('expense_', '').replace(/_/g, ' ').toUpperCase() }));
+const toNumber = (value: string) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
 
-export const Step3PnL: React.FC<Step3Props> = ({ onDataChange }) => {
-    const [rows, setRows] = useState<any[]>([]);
-    const [mappings, setMappings] = useState<Record<number, string>>({});
-    const [originalTotals, setOriginalTotals] = useState({ revenue: 0, expenses: 0 });
-    const [fileError, setFileError] = useState<string | null>(null);
+const normalizeItems = (items: any[]): PnlItem[] => {
+    if (!Array.isArray(items)) return [];
+    return items
+        .map((item) => ({
+            id: item.id || createId(),
+            name: String(item.name || '').trim(),
+            amount: Number(item.amount) || 0
+        }))
+        .filter((item) => item.name);
+};
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+const itemsSignature = (items: PnlItem[]) =>
+    JSON.stringify(items.map(item => ({ name: item.name, amount: item.amount })));
 
-        const reader = new FileReader();
-        reader.onload = (evt) => {
+export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, projectId }) => {
+    const [incomeItems, setIncomeItems] = useState<PnlItem[]>(() =>
+        normalizeItems(initialData?.pnl_income_items || initialData?.income_items || [])
+    );
+    const [expenseItems, setExpenseItems] = useState<PnlItem[]>(() =>
+        normalizeItems(initialData?.pnl_expense_items || initialData?.expense_items || [])
+    );
+    const [groupedIncome, setGroupedIncome] = useState<GroupedItem[]>(() =>
+        Array.isArray(initialData?.pnl_grouped_income) ? initialData.pnl_grouped_income : []
+    );
+    const [groupedExpenses, setGroupedExpenses] = useState<GroupedItem[]>(() =>
+        Array.isArray(initialData?.pnl_grouped_expenses) ? initialData.pnl_grouped_expenses : []
+    );
+
+    const [incomeName, setIncomeName] = useState('');
+    const [incomeAmount, setIncomeAmount] = useState('');
+    const [expenseName, setExpenseName] = useState('');
+    const [expenseAmount, setExpenseAmount] = useState('');
+    const [groupingStatus, setGroupingStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [groupingMessage, setGroupingMessage] = useState('');
+    const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
+    const [syncMessage, setSyncMessage] = useState('');
+
+    useEffect(() => {
+        const nextIncome = normalizeItems(initialData?.pnl_income_items || initialData?.income_items || []);
+        const nextExpenses = normalizeItems(initialData?.pnl_expense_items || initialData?.expense_items || []);
+        const nextGroupedIncome = Array.isArray(initialData?.pnl_grouped_income) ? initialData.pnl_grouped_income : [];
+        const nextGroupedExpenses = Array.isArray(initialData?.pnl_grouped_expenses) ? initialData.pnl_grouped_expenses : [];
+
+        setIncomeItems((prev) => (
+            itemsSignature(nextIncome) !== itemsSignature(prev) ? nextIncome : prev
+        ));
+        setExpenseItems((prev) => (
+            itemsSignature(nextExpenses) !== itemsSignature(prev) ? nextExpenses : prev
+        ));
+        setGroupedIncome((prev) => (
+            JSON.stringify(nextGroupedIncome) !== JSON.stringify(prev) ? nextGroupedIncome : prev
+        ));
+        setGroupedExpenses((prev) => (
+            JSON.stringify(nextGroupedExpenses) !== JSON.stringify(prev) ? nextGroupedExpenses : prev
+        ));
+    }, [
+        initialData?.pnl_income_items,
+        initialData?.income_items,
+        initialData?.pnl_expense_items,
+        initialData?.expense_items,
+        initialData?.pnl_grouped_income,
+        initialData?.pnl_grouped_expenses
+    ]);
+
+    useEffect(() => {
+        onDataChange({
+            pnl_income_items: incomeItems,
+            pnl_expense_items: expenseItems,
+            pnl_grouped_income: groupedIncome,
+            pnl_grouped_expenses: groupedExpenses
+        });
+    }, [incomeItems, expenseItems, groupedIncome, groupedExpenses, onDataChange]);
+
+    useEffect(() => {
+        if (!projectId) return;
+        setSyncStatus('syncing');
+        setSyncMessage('');
+        const timeout = setTimeout(async () => {
             try {
-                const bstr = evt.target?.result;
-                const wb = XLSX.read(bstr, { type: 'binary' });
-                const wsname = wb.SheetNames[0];
-                const ws = wb.Sheets[wsname];
-                const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token;
 
-                // Basic parsing logic: assume Row 1 is headers, look for "Amount" and "Description"
-                // This is a simplified parser. In reality, we might need heuristics.
-                // For MVP, assume 2 columns: Description, Amount
+                const response = await fetch('/api/pnl/sync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token ? `Bearer ${token}` : ''
+                    },
+                    body: JSON.stringify({
+                        projectId,
+                        incomeItems,
+                        expenseItems
+                    })
+                });
 
-                const parsedRows = data.slice(1).map((row, idx) => ({
-                    id: idx,
-                    description: row[0],
-                    amount: parseFloat(row[1]) || 0
-                })).filter(r => r.description && !isNaN(r.amount));
-
-                // Auto-calculate originals (Naive approach: sum distinct positive/negative? 
-                // Or ask user to verify. The roadmap says: "Calculate Original Total Revenue ... from raw file"
-                // Let's sum positives as Rev, negatives as Exp? Or just sum all.
-                // Actually, usually P&L has headers. 
-                // For now, I'll calculate total absolute sum as a sanity check, 
-                // but better: Let the user TELL us the totals or try to detect totals rows.
-                // Simplified: Sum of all positive = Rev, Sum of negative (or specified exp) = Exp.
-                // Let's just track the Sum of Mapped items vs Total of File.
-
-                const total = parsedRows.reduce((acc, r) => acc + r.amount, 0);
-
-                setRows(parsedRows);
-                setOriginalTotals({ revenue: 0, expenses: 0 }); // Reset, we'll ask user or infer? 
-                // Roadmap: "Calculate Original Total Revenue... from raw file". 
-                // I will sum all rows for now as a starting point.
-
-            } catch (err) {
-                console.error(err);
-                setFileError("Failed to parse file");
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.error || 'Failed to sync originals');
+                }
+                setSyncStatus('idle');
+            } catch (error: any) {
+                setSyncStatus('error');
+                setSyncMessage(error.message || 'Failed to sync originals');
             }
-        };
-        reader.readAsBinaryString(file);
+        }, 400);
+
+        return () => clearTimeout(timeout);
+    }, [projectId, incomeItems, expenseItems]);
+
+    const totals = useMemo(() => ({
+        income: incomeItems.reduce((sum, item) => sum + item.amount, 0),
+        expenses: expenseItems.reduce((sum, item) => sum + item.amount, 0),
+    }), [incomeItems, expenseItems]);
+
+    const handleAddIncome = () => {
+        const name = incomeName.trim();
+        if (!name) return;
+        const amount = toNumber(incomeAmount);
+        setIncomeItems(prev => [...prev, { id: createId(), name, amount }]);
+        setIncomeName('');
+        setIncomeAmount('');
     };
 
-    const totals = useMemo(() => {
-        let rev = 0;
-        let exp = 0;
-        Object.entries(mappings).forEach(([rowId, cat]) => {
-            const row = rows.find(r => r.id === Number(rowId));
-            if (!row) return;
-            if (cat.startsWith('revenue_')) rev += row.amount;
-            if (cat.startsWith('expense_')) exp += row.amount;
-        });
-        return { revenue: rev, expenses: exp };
-    }, [rows, mappings]);
+    const handleAddExpense = () => {
+        const name = expenseName.trim();
+        if (!name) return;
+        const amount = toNumber(expenseAmount);
+        setExpenseItems(prev => [...prev, { id: createId(), name, amount }]);
+        setExpenseName('');
+        setExpenseAmount('');
+    };
 
-    const isValid = Math.abs(totals.revenue - originalTotals.revenue) < 0.01 &&
-        Math.abs(totals.expenses - originalTotals.expenses) < 0.01;
+    const handleRemoveIncome = (id: string) => {
+        setIncomeItems(prev => prev.filter(item => item.id !== id));
+    };
 
-    // Manual override for expected totals if detection fails
+    const handleRemoveExpense = (id: string) => {
+        setExpenseItems(prev => prev.filter(item => item.id !== id));
+    };
+
+    const handleGroupWithAi = async () => {
+        if (!projectId) {
+            setGroupingStatus('error');
+            setGroupingMessage('Create a project before grouping.');
+            return;
+        }
+        if (incomeItems.length === 0 && expenseItems.length === 0) {
+            setGroupingStatus('error');
+            setGroupingMessage('Add at least one income or expense item.');
+            return;
+        }
+
+        setGroupingStatus('loading');
+        setGroupingMessage('Analyzing and grouping P&L data...');
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+
+            const response = await fetch('/api/pnl/group', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                },
+                body: JSON.stringify({
+                    projectId,
+                    incomeItems,
+                    expenseItems
+                })
+            });
+
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.error || 'Failed to group items');
+            }
+
+            setGroupedIncome(payload.groupedIncome || []);
+            setGroupedExpenses(payload.groupedExpenses || []);
+            setGroupingStatus('success');
+            setGroupingMessage('Grouping complete. Categories have been updated.');
+        } catch (error: any) {
+            setGroupingStatus('error');
+            setGroupingMessage(error.message || 'Grouping failed');
+        }
+    };
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
             <div className="flex flex-col gap-3">
-                <h2 className="text-xl font-bold text-white">P&L Upload & Validation</h2>
-                <p className="text-sm text-gray-400">Upload your P&L (CSV/Excel) and map categories.</p>
+                <h2 className="text-xl font-bold text-white">Income & Expenses</h2>
+                <p className="text-sm text-gray-400">
+                    Add income and expense line items manually, or review items imported from your document upload.
+                </p>
             </div>
 
-            <div className="p-6 border-2 border-dashed border-gray-600 rounded-lg text-center hover:border-blue-500 transition-colors">
-                <input type="file" accept=".csv, .xlsx, .xls" onChange={handleFileUpload} className="hidden" id="pnl-upload" />
-                <label htmlFor="pnl-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                    <span className="material-symbols-outlined text-4xl text-gray-400">upload_file</span>
-                    <span className="text-blue-400 font-medium">Click to upload P&L</span>
-                    <span className="text-xs text-gray-500">Supported: .xlsx, .csv</span>
-                </label>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-white">Original Income</h3>
+                    <div className="flex gap-2">
+                        <input
+                            value={incomeName}
+                            onChange={(event) => setIncomeName(event.target.value)}
+                            placeholder="Income name"
+                            className="flex-1 rounded-md bg-[#283339] border border-transparent px-3 py-2 text-sm text-white"
+                        />
+                        <input
+                            value={incomeAmount}
+                            onChange={(event) => setIncomeAmount(event.target.value)}
+                            placeholder="Amount"
+                            type="number"
+                            className="w-28 rounded-md bg-[#283339] border border-transparent px-3 py-2 text-sm text-white"
+                        />
+                        <Button onClick={handleAddIncome}>Add</Button>
+                    </div>
+                    <div className="space-y-2">
+                        {incomeItems.length === 0 && (
+                            <p className="text-xs text-gray-500">No income items yet.</p>
+                        )}
+                        {incomeItems.map(item => (
+                            <div key={item.id} className="flex items-center justify-between rounded-lg bg-[#1a2228] px-3 py-2">
+                                <div>
+                                    <p className="text-sm text-white">{item.name}</p>
+                                    <p className="text-xs text-gray-400">${item.amount.toLocaleString()}</p>
+                                </div>
+                                <button
+                                    className="text-xs text-red-400 hover:text-red-300"
+                                    onClick={() => handleRemoveIncome(item.id)}
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <h3 className="text-sm font-semibold text-white">Original Expenses</h3>
+                    <div className="flex gap-2">
+                        <input
+                            value={expenseName}
+                            onChange={(event) => setExpenseName(event.target.value)}
+                            placeholder="Expense name"
+                            className="flex-1 rounded-md bg-[#283339] border border-transparent px-3 py-2 text-sm text-white"
+                        />
+                        <input
+                            value={expenseAmount}
+                            onChange={(event) => setExpenseAmount(event.target.value)}
+                            placeholder="Amount"
+                            type="number"
+                            className="w-28 rounded-md bg-[#283339] border border-transparent px-3 py-2 text-sm text-white"
+                        />
+                        <Button onClick={handleAddExpense}>Add</Button>
+                    </div>
+                    <div className="space-y-2">
+                        {expenseItems.length === 0 && (
+                            <p className="text-xs text-gray-500">No expense items yet.</p>
+                        )}
+                        {expenseItems.map(item => (
+                            <div key={item.id} className="flex items-center justify-between rounded-lg bg-[#1a2228] px-3 py-2">
+                                <div>
+                                    <p className="text-sm text-white">{item.name}</p>
+                                    <p className="text-xs text-gray-400">${item.amount.toLocaleString()}</p>
+                                </div>
+                                <button
+                                    className="text-xs text-red-400 hover:text-red-300"
+                                    onClick={() => handleRemoveExpense(item.id)}
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
 
-            {rows.length > 0 && (
-                <div className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4 bg-[#1a2228] p-4 rounded-lg">
-                        <div>
-                            <label className="text-xs text-gray-400">Target Revenue (Original)</label>
-                            <input
-                                type="number"
-                                className="w-full bg-transparent text-white border-b border-gray-600 focus:border-blue-500 outline-none"
-                                value={originalTotals.revenue}
-                                onChange={e => setOriginalTotals(p => ({ ...p, revenue: parseFloat(e.target.value) || 0 }))}
-                            />
-                        </div>
-                        <div>
-                            <label className="text-xs text-gray-400">Target Expenses (Original)</label>
-                            <input
-                                type="number"
-                                className="w-full bg-transparent text-white border-b border-gray-600 focus:border-blue-500 outline-none"
-                                value={originalTotals.expenses}
-                                onChange={e => setOriginalTotals(p => ({ ...p, expenses: parseFloat(e.target.value) || 0 }))}
-                            />
+            <div className="rounded-xl border border-[#283339] bg-[#141b21] p-4 flex items-center justify-between">
+                <div>
+                    <p className="text-xs text-gray-400">Original Totals</p>
+                    <p className="text-sm text-white">Income: ${totals.income.toLocaleString()} · Expenses: ${totals.expenses.toLocaleString()}</p>
+                </div>
+                <Button
+                    onClick={handleGroupWithAi}
+                    disabled={groupingStatus === 'loading'}
+                >
+                    {groupingStatus === 'loading' ? 'Grouping...' : 'Group / Categorize with AI'}
+                </Button>
+            </div>
+
+            {groupingStatus === 'error' && (
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+                    {groupingMessage}
+                </div>
+            )}
+
+            {groupingStatus === 'success' && (
+                <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+                    {groupingMessage}
+                </div>
+            )}
+
+            {syncStatus === 'error' && (
+                <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-200">
+                    {syncMessage}
+                </div>
+            )}
+
+            {(groupedIncome.length > 0 || groupedExpenses.length > 0) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-semibold text-white">Grouped Income</h3>
+                        <div className="space-y-2">
+                            {groupedIncome.map(item => (
+                                <div key={item.category} className="flex items-center justify-between rounded-lg bg-[#1a2228] px-3 py-2">
+                                    <span className="text-sm text-white">{item.category}</span>
+                                    <span className="text-sm text-gray-300">${item.total.toLocaleString()}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
-
-                    <div className="max-h-96 overflow-auto border border-[#283339] rounded-lg">
-                        <table className="w-full text-sm text-left text-gray-400">
-                            <thead className="text-xs text-gray-200 uppercase bg-[#1a2228] sticky top-0">
-                                <tr>
-                                    <th className="px-6 py-3">Description</th>
-                                    <th className="px-6 py-3">Amount</th>
-                                    <th className="px-6 py-3">Category Map</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rows.map((row) => (
-                                    <tr key={row.id} className="border-b border-[#283339] hover:bg-[#283339]/50">
-                                        <td className="px-6 py-4 font-medium text-white">{row.description}</td>
-                                        <td className="px-6 py-4">${row.amount.toLocaleString()}</td>
-                                        <td className="px-6 py-4">
-                                            <select
-                                                className="bg-transparent border border-gray-600 rounded px-2 py-1 text-white focus:border-blue-500"
-                                                value={mappings[row.id] || ""}
-                                                onChange={(e) => setMappings(p => ({ ...p, [row.id]: e.target.value }))}
-                                            >
-                                                <option value="">Ingore / Unmapped</option>
-                                                <optgroup label="Revenue">
-                                                    {REVENUE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                                                </optgroup>
-                                                <optgroup label="Expenses">
-                                                    {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                                                </optgroup>
-                                            </select>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Validation Status */}
-                    <div className={`p-4 rounded-lg flex items-center justify-between ${isValid ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
-                        <div>
-                            <h4 className={`font-bold ${isValid ? 'text-green-500' : 'text-red-500'}`}>
-                                {isValid ? "Validation Successful" : "Validation Failed"}
-                            </h4>
-                            <p className="text-xs text-gray-400">
-                                Mapped Rev: ${totals.revenue.toLocaleString()} / Exp: ${totals.expenses.toLocaleString()}
-                            </p>
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-semibold text-white">Grouped Expenses</h3>
+                        <div className="space-y-2">
+                            {groupedExpenses.map(item => (
+                                <div key={item.category} className="flex items-center justify-between rounded-lg bg-[#1a2228] px-3 py-2">
+                                    <span className="text-sm text-white">{item.category}</span>
+                                    <span className="text-sm text-gray-300">${item.total.toLocaleString()}</span>
+                                </div>
+                            ))}
                         </div>
-                        <Button
-                            disabled={!isValid}
-                            onClick={() => {
-                                // Calculate final categorized sums
-                                const result: any = {};
-                                Object.entries(mappings).forEach(([rowId, cat]) => {
-                                    const amt = rows.find(r => r.id === Number(rowId))?.amount || 0;
-                                    result[cat] = (result[cat] || 0) + amt;
-                                });
-                                onDataChange(result);
-                            }}
-                        >
-                            Confirm & Sync
-                        </Button>
                     </div>
                 </div>
             )}
