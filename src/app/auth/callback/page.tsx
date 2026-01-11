@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { Loader2 } from 'lucide-react';
 
 export default function AuthCallbackPage() {
     const router = useRouter();
@@ -22,7 +23,7 @@ export default function AuthCallbackPage() {
     return (
         <div className="min-h-screen bg-[#111618] flex items-center justify-center">
             <div className="flex flex-col items-center gap-4">
-                <span className="material-symbols-outlined text-[#13a4ec] animate-spin text-4xl">progress_activity</span>
+                <Loader2 className="w-10 h-10 text-[#13a4ec] animate-spin" />
                 <p className="text-slate-400">Finalizing login...</p>
             </div>
         </div>

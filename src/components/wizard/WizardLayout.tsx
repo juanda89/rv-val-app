@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ValuationUploadPanel } from '@/components/wizard/ValuationUploadPanel';
+import { BarChart3 } from 'lucide-react';
 
 const STEPS = [
     { id: 1, title: 'Property Basics', icon: 'domain' },
@@ -168,7 +169,7 @@ export const WizardLayout = ({
             {/* Sidebar */}
             <div className="w-64 border-r border-[#283339] hidden md:flex flex-col p-6 sticky top-0 h-screen">
                 <Link href="/" className="flex items-center gap-2 mb-8 hover:opacity-90">
-                    <span className="material-symbols-outlined text-blue-500 text-2xl">analytics</span>
+                    <BarChart3 className="w-6 h-6 text-blue-500" />
                     <h1 className="font-bold text-xl">RV Valuations</h1>
                 </Link>
 

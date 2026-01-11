@@ -4,6 +4,22 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import {
+  BarChart3,
+  DollarSign,
+  FolderOpen,
+  LayoutGrid,
+  Loader2,
+  List,
+  MapPin,
+  MoreHorizontal,
+  MoreVertical,
+  Percent,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Trash2
+} from 'lucide-react';
 
 // Helper for formatting date
 const formatDate = (dateString: string) => {
@@ -196,7 +212,7 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen bg-[#101c22] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <span className="material-symbols-outlined text-[#13a4ec] animate-spin text-4xl">progress_activity</span>
+          <Loader2 className="w-10 h-10 text-[#13a4ec] animate-spin" />
           <p className="text-slate-400">Loading Dashboard...</p>
         </div>
       </div>
@@ -209,7 +225,7 @@ export default function DashboardPage() {
       <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#101c22] px-6 py-3 lg:px-10">
         <Link href="/" className="flex items-center gap-4 text-slate-900 dark:text-white hover:opacity-90">
           <div className="size-8 flex items-center justify-center bg-[#13a4ec]/20 rounded-lg text-[#13a4ec]">
-            <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>analytics</span>
+            <BarChart3 className="w-5 h-5 text-[#13a4ec]" />
           </div>
           <h2 className="text-lg font-bold leading-tight tracking-[-0.015em]">RV Valuations</h2>
         </Link>
@@ -244,7 +260,7 @@ export default function DashboardPage() {
           </div>
           <Link href="/projects/create">
             <button className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#13a4ec] hover:bg-sky-500 text-white rounded-lg shadow-lg shadow-[#13a4ec]/20 transition-all active:scale-95 group">
-              <span className="material-symbols-outlined font-bold group-hover:rotate-90 transition-transform">add</span>
+              <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
               <span className="font-bold text-sm">+ New Valuation</span>
             </button>
           </Link>
@@ -254,7 +270,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <span className="material-symbols-outlined text-[#13a4ec]" style={{ fontSize: '20px' }}>folder_open</span>
+              <FolderOpen className="w-5 h-5 text-blue-400" />
               <p className="text-sm font-medium">Total Valuations</p>
             </div>
             <p className="text-3xl font-bold tracking-tight">{projects.length}</p>
@@ -265,7 +281,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <span className="material-symbols-outlined text-[#13a4ec]" style={{ fontSize: '20px' }}>more_horiz</span>
+              <MoreHorizontal className="w-5 h-5 text-yellow-400" />
               <p className="text-sm font-medium">Pending Reports</p>
             </div>
             <p className="text-3xl font-bold tracking-tight">--</p>
@@ -276,7 +292,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <span className="material-symbols-outlined text-[#13a4ec]" style={{ fontSize: '20px' }}>percent</span>
+              <Percent className="w-5 h-5 text-purple-400" />
               <p className="text-sm font-medium">Average Cap Rate</p>
             </div>
             <p className="text-3xl font-bold tracking-tight">--</p>
@@ -287,7 +303,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
             <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <span className="material-symbols-outlined text-[#13a4ec]" style={{ fontSize: '20px' }}>attach_money</span>
+              <DollarSign className="w-5 h-5 text-green-400" />
               <p className="text-sm font-medium">Total Asset Value</p>
             </div>
             <p className="text-3xl font-bold tracking-tight">--</p>
@@ -303,7 +319,7 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-4">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[#13a4ec]">tune</span>
+                <SlidersHorizontal className="w-5 h-5 text-[#13a4ec]" />
                 <h3 className="text-lg font-bold">Filters</h3>
               </div>
               <div className="flex items-center gap-2">
@@ -311,14 +327,14 @@ export default function DashboardPage() {
                   onClick={() => setLayout('table')}
                   className={`px-3 py-2 rounded-lg text-xs font-semibold border ${layout === 'table' ? 'bg-[#13a4ec] text-white border-[#13a4ec]' : 'border-[#e5e7eb] dark:border-[#283339] text-slate-500 dark:text-slate-400'}`}
                 >
-                  <span className="material-symbols-outlined text-sm align-middle mr-1">table_rows</span>
+                  <List className="inline-block w-4 h-4 mr-1 align-middle" />
                   Table
                 </button>
                 <button
                   onClick={() => setLayout('grid')}
                   className={`px-3 py-2 rounded-lg text-xs font-semibold border ${layout === 'grid' ? 'bg-[#13a4ec] text-white border-[#13a4ec]' : 'border-[#e5e7eb] dark:border-[#283339] text-slate-500 dark:text-slate-400'}`}
                 >
-                  <span className="material-symbols-outlined text-sm align-middle mr-1">grid_view</span>
+                  <LayoutGrid className="inline-block w-4 h-4 mr-1 align-middle" />
                   Grid
                 </button>
               </div>
@@ -326,7 +342,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
               <div className="lg:col-span-2">
                 <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>search</span>
+                  <Search className="w-4 h-4 text-gray-400" />
                   Search by name or city
                 </label>
                 <input
@@ -338,7 +354,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>flag</span>
+                  <SlidersHorizontal className="w-4 h-4 text-gray-400" />
                   Status
                 </label>
                 <select
@@ -353,7 +369,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>location_on</span>
+                  <MapPin className="w-4 h-4 text-gray-400" />
                   Location
                 </label>
                 <select
@@ -400,7 +416,7 @@ export default function DashboardPage() {
                     </th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[18%]">
                       <span className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>location_on</span>
+                        <MapPin className="w-4 h-4 text-gray-400" />
                         Location
                       </span>
                     </th>
@@ -430,7 +446,7 @@ export default function DashboardPage() {
                     </th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right w-[8%]">
                       <span className="flex items-center justify-end gap-2">
-                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>more_vert</span>
+                        <MoreVertical className="w-4 h-4 text-gray-400" />
                         Actions
                       </span>
                     </th>
@@ -476,7 +492,7 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-6 py-4 align-top">
                         <div className="flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>location_on</span>
+                          <MapPin className="w-4 h-4 text-gray-400" />
                           <span className="text-sm text-slate-700 dark:text-slate-300 break-words">{formatLocation(project.address)}</span>
                         </div>
                       </td>
@@ -500,7 +516,7 @@ export default function DashboardPage() {
                             onClick={() => setOpenMenuId(prev => (prev === project.id ? null : project.id))}
                             aria-label="Project actions"
                           >
-                            <span className="material-symbols-outlined">more_vert</span>
+                            <MoreVertical className="w-4 h-4" />
                           </button>
                           {openMenuId === project.id && (
                             <div className="absolute right-0 mt-2 w-36 rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] shadow-lg z-10">
@@ -513,7 +529,7 @@ export default function DashboardPage() {
                                 }}
                                 disabled={deletingId === project.id}
                               >
-                                <span className="material-symbols-outlined text-sm">delete</span>
+                                <Trash2 className="w-4 h-4 text-red-500" />
                                 Delete
                               </button>
                             </div>
@@ -559,7 +575,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
                           <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>location_on</span>
+                            <MapPin className="w-4 h-4 text-gray-400" />
                             <span>{formatLocation(project.address)}</span>
                           </div>
                           <div className="flex items-center gap-2">
@@ -586,7 +602,7 @@ export default function DashboardPage() {
                               onClick={() => setOpenMenuId(prev => (prev === project.id ? null : project.id))}
                               aria-label="Project actions"
                             >
-                              <span className="material-symbols-outlined">more_vert</span>
+                              <MoreVertical className="w-4 h-4" />
                             </button>
                             {openMenuId === project.id && (
                               <div className="absolute right-0 mt-2 w-36 rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] shadow-lg z-10">
@@ -599,7 +615,7 @@ export default function DashboardPage() {
                                   }}
                                   disabled={deletingId === project.id}
                                 >
-                                  <span className="material-symbols-outlined text-sm">delete</span>
+                                  <Trash2 className="w-4 h-4 text-red-500" />
                                   Delete
                                 </button>
                               </div>
