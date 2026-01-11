@@ -140,6 +140,17 @@ export default function DashboardPage() {
     setCurrentPage(1);
   }, [searchQuery, statusFilter, locationFilter, dateSort]);
 
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-actions-menu]')) return;
+      setOpenMenuId(null);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openMenuId]);
+
   const filteredProjects = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -261,7 +272,7 @@ export default function DashboardPage() {
           <Link href="/projects/create">
             <button className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#13a4ec] hover:bg-sky-500 text-white rounded-lg shadow-lg shadow-[#13a4ec]/20 transition-all active:scale-95 group">
               <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
-              <span className="font-bold text-sm">+ New Valuation</span>
+              <span className="font-bold text-sm">New Valuation</span>
             </button>
           </Link>
         </div>
@@ -409,46 +420,25 @@ export default function DashboardPage() {
                 <thead>
                   <tr className="border-b border-[#e5e7eb] dark:border-[#283339] bg-slate-50 dark:bg-[#152026]">
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[28%]">
-                      <span className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>domain</span>
-                        Park Name
-                      </span>
+                      PARK NAME
                     </th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[18%]">
-                      <span className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-gray-400" />
-                        Location
-                      </span>
+                      LOCATION
                     </th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[14%]">
-                      <span className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>calendar_month</span>
-                        Date Created
-                      </span>
+                      DATE CREATED
                     </th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[12%]">
-                      <span className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>paid</span>
-                        Valuation
-                      </span>
+                      VALUATION
                     </th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[10%]">
-                      <span className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>percent</span>
-                        Cap Rate
-                      </span>
+                      CAP RATE
                     </th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[10%]">
-                      <span className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>check_circle</span>
-                        Status
-                      </span>
+                      STATUS
                     </th>
                     <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right w-[8%]">
-                      <span className="flex items-center justify-end gap-2">
-                        <MoreVertical className="w-4 h-4 text-gray-400" />
-                        Actions
-                      </span>
+                      ACTIONS
                     </th>
                   </tr>
                 </thead>
@@ -510,7 +500,7 @@ export default function DashboardPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 align-top text-right">
-                        <div className="relative inline-flex" onClick={event => event.stopPropagation()}>
+                        <div className="relative inline-flex" data-actions-menu onClick={event => event.stopPropagation()}>
                           <button
                             className="text-slate-400 hover:text-[#13a4ec] transition-colors p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-[#283339]"
                             onClick={() => setOpenMenuId(prev => (prev === project.id ? null : project.id))}
@@ -596,7 +586,7 @@ export default function DashboardPage() {
                             <span className="size-1.5 rounded-full bg-emerald-500"></span>
                             {project.status || 'Active'}
                           </span>
-                          <div className="relative" onClick={event => event.stopPropagation()}>
+                          <div className="relative" data-actions-menu onClick={event => event.stopPropagation()}>
                             <button
                               className="text-slate-400 hover:text-[#13a4ec] transition-colors p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-[#283339]"
                               onClick={() => setOpenMenuId(prev => (prev === project.id ? null : project.id))}

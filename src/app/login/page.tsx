@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
+import { BarChart3, Lock, Mail } from 'lucide-react';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -44,7 +45,7 @@ export default function LoginPage() {
                 {/* Brand Logo (Top Left) */}
                 <div className="relative z-10 flex items-center gap-3 text-white">
                     <div className="size-10 flex items-center justify-center rounded-lg bg-[#13a4ec]/20 text-[#13a4ec] border border-[#13a4ec]/30">
-                        <span className="material-symbols-outlined text-2xl">analytics</span>
+                        <BarChart3 className="w-6 h-6 text-[#13a4ec]" />
                     </div>
                     <h2 className="text-white text-2xl font-bold tracking-tight">ParkValuate</h2>
                 </div>
@@ -105,14 +106,14 @@ export default function LoginPage() {
                         <div className="flex flex-col gap-2">
                             <label className="text-slate-200 text-sm font-medium" htmlFor="email">Email Address</label>
                             <div className="relative">
-                                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">mail</span>
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                                 <input className="w-full h-12 rounded-lg bg-[#1c262c] border border-slate-700 text-white pl-11 pr-4 placeholder-slate-500" id="email" placeholder="name@company.com" type="email" />
                             </div>
                         </div>
                         <div className="flex flex-col gap-2">
                             <label className="text-slate-200 text-sm font-medium" htmlFor="password">Password</label>
                             <div className="relative">
-                                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">lock</span>
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                                 <input className="w-full h-12 rounded-lg bg-[#1c262c] border border-slate-700 text-white pl-11 pr-12 placeholder-slate-500" id="password" placeholder="Enter your password" type="password" />
                             </div>
                         </div>

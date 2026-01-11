@@ -20,15 +20,32 @@ const getMimeType = (file: File) => {
     return '';
 };
 
-const buildPrompt = (keys: string[]) => `
-You are an extraction service for RV valuation documents.
-Extract data only for the following keys and return a valid JSON object.
-If a value is missing or unknown, omit the key entirely.
-Return numbers when possible.
+const buildPrompt = (keys: string[]) => {
+    const revenueKeys = keys.filter(key => key.startsWith('revenue_'));
+    const expenseKeys = keys.filter(key => key.startsWith('expense_'));
+    const generalKeys = keys.filter(key => !key.startsWith('revenue_') && !key.startsWith('expense_'));
 
-Keys:
-${keys.join(', ')}
+    const formatList = (list: string[]) => list.map(item => `- ${item}`).join('\n');
+
+    return `
+You are an expert RV park valuation analyst.
+I will provide a document with relevant information to evaluate a new RV park project.
+
+Identify the following information with at least 95% confidence.
+If you are not sure, omit the field. Do not invent values.
+Return ONLY a valid JSON object (no markdown, no extra text).
+Use the exact keys listed below. Use numbers when possible.
+
+General fields:
+${formatList(generalKeys)}
+
+Income (map each document line item to one of these keys):
+${formatList(revenueKeys)}
+
+Expenses (map each document line item to one of these keys):
+${formatList(expenseKeys)}
 `;
+};
 
 export async function POST(req: Request) {
     try {
@@ -56,7 +73,7 @@ export async function POST(req: Request) {
         const prompt = buildPrompt(keys);
 
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:generateContent?key=${apiKey}`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

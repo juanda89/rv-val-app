@@ -39,6 +39,14 @@ const extractCityFromGeocode = (result: any) => {
     );
 };
 
+const extractCountyFromGeocode = (result: any) => {
+    const components = result?.address_components || [];
+    return (
+        components.find((component: any) => component.types?.includes('administrative_area_level_2'))?.long_name ||
+        ''
+    );
+};
+
 const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
     const {
         ready,
@@ -75,8 +83,9 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
             const { lat, lng } = await getLatLng(results[0]);
             setCoordinates({ lat, lng });
             const city = extractCityFromGeocode(results[0]) || extractCityFromAddressString(address);
+            const county = extractCountyFromGeocode(results[0]);
 
-            onDataChange({
+            const payload: Record<string, any> = {
                 name: projectName || address, // Use project name or fallback to address
                 address,
                 city,
@@ -85,7 +94,13 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                 // Mock demographics for now
                 population_1mile: 12500,
                 median_income: 65000
-            });
+            };
+
+            if (county) {
+                payload.county = county;
+            }
+
+            onDataChange(payload);
         } catch (error) {
             console.error("Error: ", error);
         }
