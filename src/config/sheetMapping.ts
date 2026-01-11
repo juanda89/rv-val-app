@@ -29,6 +29,12 @@ export const SHEET_MAPPING = {
     tax_assessment_rate: "C27",
     tax_millage_rate: "C28",
     tax_prev_year_amount: "C29",
+
+    // --- Valuation Drivers ---
+    annual_rent_growth: "C30",
+    expense_inflation: "C31",
+    exit_cap_rate: "C32",
+    occupancy_target: "C33",
   },
   outputs: {
     sheetName: SHEET_NAMES.OUTPUT,

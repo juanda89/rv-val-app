@@ -1,658 +1,353 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
-import {
-  BarChart3,
-  DollarSign,
-  FolderOpen,
-  LayoutGrid,
-  Loader2,
-  List,
-  MapPin,
-  MoreHorizontal,
-  MoreVertical,
-  Percent,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Trash2
-} from 'lucide-react';
+import { motion } from 'framer-motion';
+import { FadeInStagger, FadeInStaggerItem } from '@/components/motion/FadeInStagger';
+import { Inter } from 'next/font/google';
 
-// Helper for formatting date
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
-};
+const inter = Inter({
+    subsets: ['latin'],
+    weight: ['300', '400', '500', '600', '700', '800']
+});
 
-export default function DashboardPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [locationFilter, setLocationFilter] = useState('all');
-  const [dateSort, setDateSort] = useState('newest');
-  const [layout, setLayout] = useState<'table' | 'grid'>('table');
-  const [currentPage, setCurrentPage] = useState(1);
-  const hasMapsKey = Boolean(
-    process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY &&
-    !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder')
-  );
-  const pageSize = 25;
-
-  const getInitials = (name: string) => {
-    const parts = name.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return 'NA';
-    const first = parts[0]?.[0] || '';
-    const second = parts.length > 1 ? parts[1]?.[0] || '' : parts[0]?.[1] || '';
-    return `${first}${second}`.toUpperCase();
-  };
-
-  const colorPalette = ['#0f766e', '#1d4ed8', '#7c2d12', '#166534', '#7c3aed', '#b91c1c'];
-  const getAvatarColor = (seed: string) => {
-    let hash = 0;
-    for (let i = 0; i < seed.length; i += 1) {
-      hash = (hash << 5) - hash + seed.charCodeAt(i);
-      hash |= 0;
-    }
-    const index = Math.abs(hash) % colorPalette.length;
-    return colorPalette[index];
-  };
-
-  const getMapUrl = (address?: string) => {
-    if (!hasMapsKey || !address) return '';
-    const encodedAddress = encodeURIComponent(address);
-    return `https://maps.googleapis.com/maps/api/staticmap?center=${encodedAddress}&zoom=15&size=160x160&maptype=roadmap&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}`;
-  };
-
-  const getLocationParts = (address?: string) => {
-    if (!address) return { city: '', state: '', country: '' };
-    const parts = address
-      .split(',')
-      .map(part => part.trim())
-      .filter(Boolean);
-
-    if (parts.length >= 3) {
-      const country = parts[parts.length - 1] || '';
-      const state = parts[parts.length - 2] || '';
-      const city = parts[parts.length - 3] || '';
-      return { city, state, country };
-    }
-
-    if (parts.length === 2) {
-      return { city: parts[0] || '', state: parts[1] || '', country: '' };
-    }
-
-    return { city: parts[0] || '', state: '', country: '' };
-  };
-
-  const formatLocation = (address?: string) => {
-    const { city, state, country } = getLocationParts(address);
-    const trailing = [state, country].filter(Boolean).join(', ');
-    const formatted = [city, trailing].filter(Boolean).join(' · ');
-    return formatted || 'Unknown';
-  };
-
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-      } else {
-        setUser(session.user);
-        fetchProjects();
-      }
-    };
-    checkUser();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) router.push('/login');
-      else setUser(session.user);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [router]);
-
-  const fetchProjects = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) console.error('Error fetching projects:', error);
-    else setProjects(data || []);
-
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, statusFilter, locationFilter, dateSort]);
-
-  useEffect(() => {
-    if (!openMenuId) return;
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-actions-menu]')) return;
-      setOpenMenuId(null);
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [openMenuId]);
-
-  const filteredProjects = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-
-    const normalized = projects.filter(project => {
-      const name = (project.name || '').toLowerCase();
-      const address = (project.address || '').toLowerCase();
-      const { city } = getLocationParts(project.address || '');
-      const cityValue = city.toLowerCase();
-
-      const matchesQuery = !query || name.includes(query) || address.includes(query) || cityValue.includes(query);
-      const statusValue = (project.status || 'active').toLowerCase();
-      const matchesStatus = statusFilter === 'all' || statusValue === statusFilter;
-      const matchesLocation = locationFilter === 'all' || city === locationFilter;
-
-      return matchesQuery && matchesStatus && matchesLocation;
-    });
-
-    const sorted = normalized.slice().sort((a, b) => {
-      const aDate = new Date(a.created_at).getTime();
-      const bDate = new Date(b.created_at).getTime();
-      return dateSort === 'oldest' ? aDate - bDate : bDate - aDate;
-    });
-
-    return sorted;
-  }, [projects, searchQuery, statusFilter, locationFilter, dateSort]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / pageSize));
-  const paginatedProjects = filteredProjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  const locationOptions = useMemo(() => {
-    const citySet = new Set<string>();
-    projects.forEach(project => {
-      const { city } = getLocationParts(project.address || '');
-      if (city) citySet.add(city);
-    });
-    return Array.from(citySet).sort((a, b) => a.localeCompare(b));
-  }, [projects]);
-
-  const handleDeleteProject = async (projectId: string) => {
-    if (!confirm('Delete this valuation? This will remove the Drive file and the project record.')) return;
-    setDeletingId(projectId);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const response = await fetch('/api/projects/delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({ projectId })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Delete failed');
-      }
-
-      setProjects(prev => prev.filter(project => project.id !== projectId));
-    } catch (error: any) {
-      console.error('Delete failed:', error);
-      alert(error.message || 'Delete failed');
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  if (loading || !user) {
+export default function LandingPage() {
     return (
-      <div className="min-h-screen bg-[#101c22] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-10 h-10 text-[#13a4ec] animate-spin" />
-          <p className="text-slate-400">Loading Dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-[#f6f7f8] dark:bg-[#101c22] text-slate-900 dark:text-white font-sans min-h-screen flex flex-col overflow-x-hidden">
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#101c22] px-6 py-3 lg:px-10">
-        <Link href="/" className="flex items-center gap-4 text-slate-900 dark:text-white hover:opacity-90">
-          <div className="size-8 flex items-center justify-center bg-[#13a4ec]/20 rounded-lg text-[#13a4ec]">
-            <BarChart3 className="w-5 h-5 text-[#13a4ec]" />
-          </div>
-          <h2 className="text-lg font-bold leading-tight tracking-[-0.015em]">RV Valuations</h2>
-        </Link>
-        {/* Desktop Nav Links */}
-        <div className="hidden md:flex flex-1 justify-end gap-8">
-          <nav className="flex items-center gap-6 lg:gap-9">
-            <Link className="text-[#13a4ec] text-sm font-medium leading-normal" href="/">Valuations</Link>
-          </nav>
-          <div className="flex items-center gap-3 pl-4 border-l border-[#e5e7eb] dark:border-[#283339]">
-            <div className="flex flex-col items-end hidden lg:flex">
-              <span className="text-xs font-semibold">{user.email?.split('@')[0]}</span>
-              <span className="text-[10px] text-slate-500">Analyst</span>
-            </div>
-            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 ring-2 ring-[#13a4ec]/20" style={{ backgroundImage: `url("${user.user_metadata?.avatar_url || 'https://lh3.googleusercontent.com/aida-public/AB6AXuCfiRrmsH38PFbM3aPEy653MqJHkxb_dtUwGa1EkqeNY6U1BoaGt-Xn1pryFa7cZbAYVCTiESpF99VlU8eYXkQdGBTUU5xHCKGwaKPBtiO9VyffyCKfMYI1_gIWTwJvrkCsa68f3b7kggrkoxlscfK20s_9VPx--WU5ULSksu69ZmQD5YE874GCQxRer_MTLm8U654wvMPHc3ZcmF5o7pNT1e8vbNCfhOrwDcT7HgominJ-J5jozoeFinIsyKaBxXLS819EIHEh80M'}")` }}></div>
-            <button onClick={() => supabase.auth.signOut()} className="text-xs text-red-400 hover:text-red-300 ml-2">Sign Out</button>
-          </div>
-        </div>
-        {/* Mobile Menu Icon */}
-        <div className="flex md:hidden">
-          <button className="p-2 text-slate-900 dark:text-white">
-            <span className="material-symbols-outlined">menu</span>
-          </button>
-        </div>
-      </header>
-
-      <main className="flex-1 w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
-        {/* Page Heading & Actions */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-3xl sm:text-4xl font-black leading-tight tracking-[-0.033em]">Valuations & Analytics</h1>
-            <p className="text-slate-500 dark:text-[#9db0b9] text-base font-normal">Manage your property valuations and review past performance analytics.</p>
-          </div>
-          <Link href="/projects/create">
-            <button className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#13a4ec] hover:bg-sky-500 text-white rounded-lg shadow-lg shadow-[#13a4ec]/20 transition-all active:scale-95 group">
-              <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
-              <span className="font-bold text-sm">New Valuation</span>
-            </button>
-          </Link>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
-            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <FolderOpen className="w-5 h-5 text-blue-400" />
-              <p className="text-sm font-medium">Total Valuations</p>
-            </div>
-            <p className="text-3xl font-bold tracking-tight">{projects.length}</p>
-            <p className="text-xs text-green-500 font-medium flex items-center gap-1">
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>trending_up</span>
-              +2 this month
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
-            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <MoreHorizontal className="w-5 h-5 text-yellow-400" />
-              <p className="text-sm font-medium">Pending Reports</p>
-            </div>
-            <p className="text-3xl font-bold tracking-tight">--</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>info</span>
-              Requires attention
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
-            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <Percent className="w-5 h-5 text-purple-400" />
-              <p className="text-sm font-medium">Average Cap Rate</p>
-            </div>
-            <p className="text-3xl font-bold tracking-tight">--</p>
-            <p className="text-xs text-green-500 font-medium flex items-center gap-1">
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>trending_up</span>
-              +0.4% vs last year
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-[#1c2930] border border-[#e5e7eb] dark:border-[#283339] shadow-sm">
-            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-              <DollarSign className="w-5 h-5 text-green-400" />
-              <p className="text-sm font-medium">Total Asset Value</p>
-            </div>
-            <p className="text-3xl font-bold tracking-tight">--</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>stacked_line_chart</span>
-              Across all properties
-            </p>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="rounded-2xl border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] p-6 shadow-sm">
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <SlidersHorizontal className="w-5 h-5 text-[#13a4ec]" />
-                <h3 className="text-lg font-bold">Filters</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setLayout('table')}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold border ${layout === 'table' ? 'bg-[#13a4ec] text-white border-[#13a4ec]' : 'border-[#e5e7eb] dark:border-[#283339] text-slate-500 dark:text-slate-400'}`}
-                >
-                  <List className="inline-block w-4 h-4 mr-1 align-middle" />
-                  Table
-                </button>
-                <button
-                  onClick={() => setLayout('grid')}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold border ${layout === 'grid' ? 'bg-[#13a4ec] text-white border-[#13a4ec]' : 'border-[#e5e7eb] dark:border-[#283339] text-slate-500 dark:text-slate-400'}`}
-                >
-                  <LayoutGrid className="inline-block w-4 h-4 mr-1 align-middle" />
-                  Grid
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-              <div className="lg:col-span-2">
-                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
-                  <Search className="w-4 h-4 text-gray-400" />
-                  Search by name or city
-                </label>
-                <input
-                  value={searchQuery}
-                  onChange={event => setSearchQuery(event.target.value)}
-                  placeholder="Search valuations..."
-                  className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-transparent px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#13a4ec]"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
-                  <SlidersHorizontal className="w-4 h-4 text-gray-400" />
-                  Status
-                </label>
-                <select
-                  value={statusFilter}
-                  onChange={event => setStatusFilter(event.target.value)}
-                  className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-transparent px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#13a4ec]"
-                >
-                  <option value="all">All</option>
-                  <option value="active">Active</option>
-                  <option value="archived">Archived</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
-                  <MapPin className="w-4 h-4 text-gray-400" />
-                  Location
-                </label>
-                <select
-                  value={locationFilter}
-                  onChange={event => setLocationFilter(event.target.value)}
-                  className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-transparent px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#13a4ec]"
-                >
-                  <option value="all">All</option>
-                  {locationOptions.map(city => (
-                    <option key={city} value={city}>{city}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>calendar_month</span>
-                  Date
-                </label>
-                <select
-                  value={dateSort}
-                  onChange={event => setDateSort(event.target.value)}
-                  className="w-full rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-transparent px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#13a4ec]"
-                >
-                  <option value="newest">Newest</option>
-                  <option value="oldest">Oldest</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Data Display */}
-        <div className="rounded-xl border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] shadow-sm">
-          {layout === 'table' ? (
-            <div className="overflow-hidden">
-              <table className="w-full table-fixed text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-[#e5e7eb] dark:border-[#283339] bg-slate-50 dark:bg-[#152026]">
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[28%]">
-                      PARK NAME
-                    </th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[18%]">
-                      LOCATION
-                    </th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[14%]">
-                      DATE CREATED
-                    </th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[12%]">
-                      VALUATION
-                    </th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[10%]">
-                      CAP RATE
-                    </th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider w-[10%]">
-                      STATUS
-                    </th>
-                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right w-[8%]">
-                      ACTIONS
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e5e7eb] dark:divide-[#283339]">
-                  {loading && (
-                    <tr><td colSpan={7} className="text-center p-8 text-gray-500">Loading projects...</td></tr>
-                  )}
-                  {!loading && filteredProjects.length === 0 && (
-                    <tr><td colSpan={7} className="text-center p-8 text-gray-500">No projects found. Create one!</td></tr>
-                  )}
-                  {paginatedProjects.map((project) => (
-                    <tr
-                      key={project.id}
-                      className="group hover:bg-slate-50 dark:hover:bg-[#1a262d] transition-colors cursor-pointer"
-                      onClick={() => router.push(`/projects/create?projectId=${project.id}`)}
-                    >
-                      <td className="px-6 py-4 align-top">
-                        <div className="flex items-center gap-3">
-                          {(() => {
-                            const mapUrl = getMapUrl(project.address);
-                            const initials = getInitials(project.name || 'NA');
-                            const fallbackColor = getAvatarColor(project.name || project.id);
-                            return (
-                              <div
-                                className="size-10 rounded-lg bg-cover bg-center shrink-0 border border-[#e5e7eb] dark:border-[#283339] flex items-center justify-center"
-                                style={
-                                  mapUrl
-                                    ? { backgroundImage: `url("${mapUrl}")` }
-                                    : { backgroundColor: fallbackColor }
-                                }
-                              >
-                                {!mapUrl && <span className="text-xs font-bold text-white">{initials}</span>}
-                              </div>
-                            );
-                          })()}
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-900 dark:text-white group-hover:text-[#13a4ec] transition-colors break-words">{project.name}</p>
-                            <p className="text-xs text-slate-500">ID: #{project.id.slice(0, 8)}</p>
-                          </div>
+        <div className={`bg-[#101622] text-white min-h-screen flex flex-col overflow-x-hidden selection:bg-[#13a4ec]/30 ${inter.className}`}>
+            {/* Top Navigation */}
+            <nav className="fixed top-0 left-0 right-0 z-50 bg-[#101622]/70 backdrop-blur-md border-b border-white/5">
+                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="size-8 text-[#13a4ec]">
+                            <span className="material-symbols-outlined text-4xl">analytics</span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 align-top">
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-slate-700 dark:text-slate-300 break-words">{formatLocation(project.address)}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 align-top text-sm text-slate-600 dark:text-slate-400">{formatDate(project.created_at)}</td>
-                      <td className="px-6 py-4 align-top">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white">--</span>
-                      </td>
-                      <td className="px-6 py-4 align-top">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white">--</span>
-                      </td>
-                      <td className="px-6 py-4 align-top">
-                        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
-                          <span className="size-1.5 rounded-full bg-emerald-500"></span>
-                          {project.status || 'Active'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 align-top text-right">
-                        <div className="relative inline-flex" data-actions-menu onClick={event => event.stopPropagation()}>
-                          <button
-                            className="text-slate-400 hover:text-[#13a4ec] transition-colors p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-[#283339]"
-                            onClick={() => setOpenMenuId(prev => (prev === project.id ? null : project.id))}
-                            aria-label="Project actions"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
-                          {openMenuId === project.id && (
-                            <div className="absolute right-0 mt-2 w-36 rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] shadow-lg z-10">
-                              <button
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setOpenMenuId(null);
-                                  handleDeleteProject(project.id);
-                                }}
-                                disabled={deletingId === project.id}
-                              >
-                                <Trash2 className="w-4 h-4 text-red-500" />
-                                Delete
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-6">
-              {filteredProjects.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">No projects found. Create one!</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {paginatedProjects.map(project => {
-                    const mapUrl = getMapUrl(project.address);
-                    const initials = getInitials(project.name || 'NA');
-                    const fallbackColor = getAvatarColor(project.name || project.id);
-                    return (
-                      <div
-                        key={project.id}
-                        className="rounded-xl border border-[#e5e7eb] dark:border-[#283339] p-4 hover:bg-slate-50 dark:hover:bg-[#1a262d] transition-colors cursor-pointer"
-                        onClick={() => router.push(`/projects/create?projectId=${project.id}`)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="size-12 rounded-lg bg-cover bg-center shrink-0 border border-[#e5e7eb] dark:border-[#283339] flex items-center justify-center"
-                            style={
-                              mapUrl
-                                ? { backgroundImage: `url("${mapUrl}")` }
-                                : { backgroundColor: fallbackColor }
-                            }
-                          >
-                            {!mapUrl && <span className="text-sm font-bold text-white">{initials}</span>}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-base font-bold text-slate-900 dark:text-white break-words">{project.name}</p>
-                            <p className="text-xs text-slate-500">ID: #{project.id.slice(0, 8)}</p>
-                          </div>
-                        </div>
-                        <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-4 h-4 text-gray-400" />
-                            <span>{formatLocation(project.address)}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>calendar_month</span>
-                            <span>{formatDate(project.created_at)}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>paid</span>
-                            <span>--</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '16px' }}>percent</span>
-                            <span>--</span>
-                          </div>
-                        </div>
-                        <div className="mt-4 flex items-center justify-between">
-                          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
-                            <span className="size-1.5 rounded-full bg-emerald-500"></span>
-                            {project.status || 'Active'}
-                          </span>
-                          <div className="relative" data-actions-menu onClick={event => event.stopPropagation()}>
-                            <button
-                              className="text-slate-400 hover:text-[#13a4ec] transition-colors p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-[#283339]"
-                              onClick={() => setOpenMenuId(prev => (prev === project.id ? null : project.id))}
-                              aria-label="Project actions"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-                            {openMenuId === project.id && (
-                              <div className="absolute right-0 mt-2 w-36 rounded-lg border border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#1c2930] shadow-lg z-10">
-                                <button
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setOpenMenuId(null);
-                                    handleDeleteProject(project.id);
-                                  }}
-                                  disabled={deletingId === project.id}
-                                >
-                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                  Delete
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        <h2 className="text-white text-xl font-bold tracking-tight">RV Valuator</h2>
+                    </div>
+                    <div className="hidden md:flex items-center gap-8">
+                        <a className="text-sm font-medium text-gray-400 hover:text-white transition-colors" href="#features">Features</a>
+                        <a className="text-sm font-medium text-gray-400 hover:text-white transition-colors" href="#pricing">Pricing</a>
+                        <a className="text-sm font-medium text-gray-400 hover:text-white transition-colors" href="#resources">Resources</a>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <Link className="hidden sm:block text-sm font-medium text-white hover:text-[#13a4ec] transition-colors" href="/login">Sign In</Link>
+                        <motion.button
+                            className="bg-[#13a4ec] hover:bg-[#0f8bc7] text-white text-sm font-bold py-2.5 px-5 rounded-full transition-all shadow-[0_0_10px_rgba(19,164,236,0.2)] hover:shadow-[0_0_20px_rgba(19,164,236,0.3)] flex items-center gap-2"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            type="button"
+                        >
+                            <span>Book Demo</span>
+                            <span className="material-symbols-outlined text-base">arrow_forward</span>
+                        </motion.button>
+                    </div>
                 </div>
-              )}
-            </div>
-          )}
-          <div className="px-6 py-4 border-t border-[#e5e7eb] dark:border-[#283339] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Showing{' '}
-              <span className="font-medium text-slate-900 dark:text-white">
-                {filteredProjects.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
-              </span>{' '}
-              to{' '}
-              <span className="font-medium text-slate-900 dark:text-white">
-                {Math.min(currentPage * pageSize, filteredProjects.length)}
-              </span>{' '}
-              of{' '}
-              <span className="font-medium text-slate-900 dark:text-white">{filteredProjects.length}</span>{' '}
-              results
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                className="px-3 py-2 rounded-lg border border-[#e5e7eb] dark:border-[#283339] text-xs font-semibold text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#283339] disabled:opacity-50"
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-              >
-                Prev
-              </button>
-              <span className="text-xs text-slate-500 dark:text-slate-400">Page {currentPage} of {totalPages}</span>
-              <button
-                className="px-3 py-2 rounded-lg border border-[#e5e7eb] dark:border-[#283339] text-xs font-semibold text-slate-500 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#283339] disabled:opacity-50"
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+            </nav>
+
+            {/* Hero Section */}
+            <section
+                className="relative pt-32 pb-20 px-6"
+                style={{ backgroundImage: 'radial-gradient(circle at 50% 0%, rgba(19, 164, 236, 0.15) 0%, rgba(16, 22, 34, 0) 60%)' }}
+            >
+                <div className="max-w-5xl mx-auto text-center flex flex-col items-center">
+                    <FadeInStagger className="flex flex-col items-center">
+                        <FadeInStaggerItem>
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#13a4ec]/10 border border-[#13a4ec]/20 text-[#13a4ec] text-xs font-semibold uppercase tracking-wider mb-8">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#13a4ec] opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#13a4ec]"></span>
+                                </span>
+                                v2.0 Now Live
+                            </div>
+                        </FadeInStaggerItem>
+                        <FadeInStaggerItem>
+                            <h1 className="text-5xl md:text-7xl font-bold leading-[1.1] tracking-tight mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white to-white/70">
+                                Precision Valuation for<br className="hidden md:block" /> RV Parks. Powered by Data.
+                            </h1>
+                        </FadeInStaggerItem>
+                        <FadeInStaggerItem>
+                            <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed font-light">
+                                Institutional-grade analytics for the modern campground investor. Underwrite deals in minutes, not days, with real-time market comps.
+                            </p>
+                        </FadeInStaggerItem>
+                        <FadeInStaggerItem>
+                            <div className="flex flex-col sm:flex-row gap-4 w-full justify-center mb-20">
+                                <motion.button
+                                    className="h-12 px-8 rounded-lg bg-[#13a4ec] text-white font-bold text-base hover:bg-[#0f8bc7] transition-all shadow-[0_0_20px_rgba(19,164,236,0.3)] flex items-center justify-center gap-2"
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    type="button"
+                                >
+                                    Book a Live Demo
+                                </motion.button>
+                                <motion.button
+                                    className="h-12 px-8 rounded-lg bg-[#1c2930] border border-[#2a3b45] text-white font-semibold text-base hover:bg-[#23333d] hover:border-[#13a4ec]/50 transition-all flex items-center justify-center gap-2"
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    type="button"
+                                >
+                                    <span className="material-symbols-outlined">description</span>
+                                    See Sample Report
+                                </motion.button>
+                            </div>
+                        </FadeInStaggerItem>
+                    </FadeInStagger>
+
+                    <div className="w-full max-w-6xl mx-auto px-4">
+                        <div className="relative rounded-xl border border-[#2a3b45] bg-[#151f28] overflow-hidden shadow-[0_25px_50px_-12px_rgba(0,0,0,0.7)] transition-transform duration-500 hover:scale-[1.01]">
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#101622] via-transparent to-transparent z-10 opacity-60"></div>
+                            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#13a4ec]/50 to-transparent z-20"></div>
+                            <div className="w-full aspect-[16/9] bg-[#1c2930] relative">
+                                <div className="h-12 border-b border-[#2a3b45] flex items-center px-6 gap-4">
+                                    <div className="w-32 h-3 bg-[#2a3b45]/50 rounded-full"></div>
+                                    <div className="flex-1"></div>
+                                    <div className="w-8 h-8 rounded-full bg-[#2a3b45]/50"></div>
+                                </div>
+                                <div className="p-6 grid grid-cols-12 gap-6 h-[calc(100%-3rem)]">
+                                    <div className="col-span-3 bg-[#101622]/50 rounded border border-[#2a3b45]/30 h-full"></div>
+                                    <div className="col-span-6 flex flex-col gap-6">
+                                        <div className="h-64 bg-[#101622]/50 rounded border border-[#2a3b45]/30 relative overflow-hidden">
+                                            <svg className="absolute bottom-0 left-0 w-full h-full text-[#13a4ec] opacity-20" preserveAspectRatio="none" viewBox="0 0 100 100">
+                                                <path d="M0 100 L 10 80 L 30 85 L 50 40 L 70 60 L 90 20 L 100 10 V 100 Z" fill="currentColor"></path>
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1 bg-[#101622]/50 rounded border border-[#2a3b45]/30"></div>
+                                    </div>
+                                    <div className="col-span-3 flex flex-col gap-6">
+                                        <div className="h-32 bg-[#101622]/50 rounded border border-[#2a3b45]/30"></div>
+                                        <div className="flex-1 bg-[#101622]/50 rounded border border-[#2a3b45]/30"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Social Proof */}
+            <section className="py-10 border-y border-[#2a3b45] bg-[#0d121b]">
+                <div className="max-w-7xl mx-auto px-6 text-center">
+                    <p className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-8">Trusted by top real estate funds</p>
+                    <div className="flex flex-wrap justify-center items-center gap-12 md:gap-20 opacity-50 grayscale">
+                        {['APEX FUND', 'HORIZON', 'STONEGATE', 'VENTURE', 'OAKWOOD'].map((name, index) => (
+                            <div key={name} className="h-8 flex items-center gap-2">
+                                <span className="material-symbols-outlined text-3xl">apartment</span>
+                                <span className="font-bold text-lg">{name}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Features Bento Grid */}
+            <section className="py-24 px-6 relative" id="features">
+                <div className="max-w-7xl mx-auto">
+                    <div className="mb-16">
+                        <h2 className="text-3xl md:text-4xl font-bold mb-4">Analytics Suite</h2>
+                        <p className="text-gray-400 text-lg max-w-2xl">Everything you need to evaluate parks with confidence, all in one dashboard.</p>
+                    </div>
+                    <FadeInStagger className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {[
+                            { icon: 'monitoring', title: 'Instant P&L', body: 'Generate comprehensive financials instantly based on historical performance and predictive revenue models.' },
+                            { icon: 'calculate', title: 'Predictive Tax', body: 'Forecast future liabilities with precision. Our engine accounts for local millage rates and reassessment risks.' },
+                            { icon: 'map', title: 'Hyper-Local Comps', body: 'Analyze comparable parks in the exact vicinity. Filter by amenities, size, and current occupancy rates.' }
+                        ].map((card) => (
+                            <FadeInStaggerItem key={card.title}>
+                                <div className="group relative bg-[#1c2930] border border-[#2a3b45] rounded-xl p-8 hover:border-[#13a4ec]/40 transition-all duration-300 hover:-translate-y-1">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-[#13a4ec]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-xl"></div>
+                                    <div className="relative z-10">
+                                        <div className="w-12 h-12 rounded-lg bg-[#13a4ec]/10 flex items-center justify-center text-[#13a4ec] mb-6">
+                                            <span className="material-symbols-outlined text-2xl">{card.icon}</span>
+                                        </div>
+                                        <h3 className="text-xl font-bold text-white mb-2">{card.title}</h3>
+                                        <p className="text-gray-400 text-sm leading-relaxed">{card.body}</p>
+                                    </div>
+                                </div>
+                            </FadeInStaggerItem>
+                        ))}
+                    </FadeInStagger>
+                </div>
+            </section>
+
+            {/* Deep Dive / The Sheets Engine */}
+            <section className="py-24 px-6 bg-[#0c111a]" id="resources">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-16">
+                    <div className="w-full md:w-1/2">
+                        <div className="inline-block px-3 py-1 rounded bg-[#2a3b45]/30 text-[#13a4ec] text-xs font-mono mb-6">./engine_v2.0</div>
+                        <h2 className="text-3xl md:text-5xl font-bold mb-6">The Sheets Engine™</h2>
+                        <p className="text-gray-400 text-lg leading-relaxed mb-8">
+                            Transition from messy spreadsheets to structured data without losing the flexibility you love. Our engine ingests raw Excel data and transforms it into interactive, visual dashboards instantly.
+                        </p>
+                        <ul className="space-y-4 mb-8">
+                            {['Automatic rent roll parsing', 'Standardized expense categorization', 'Export to PDF, Excel, or shareable link'].map((item) => (
+                                <li key={item} className="flex items-center gap-3 text-sm text-gray-300">
+                                    <span className="material-symbols-outlined text-[#13a4ec]">check_circle</span>
+                                    {item}
+                                </li>
+                            ))}
+                        </ul>
+                        <button className="text-white border-b border-[#13a4ec] pb-1 hover:text-[#13a4ec] transition-colors flex items-center gap-2">
+                            Learn about our API <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                        </button>
+                    </div>
+                    <div className="w-full md:w-1/2">
+                        <div className="relative w-full aspect-square md:aspect-[4/3] bg-[#1c2930] border border-[#2a3b45] rounded-2xl overflow-hidden p-8 flex items-center justify-center">
+                            <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/cubes.png')" }}></div>
+                            <div className="relative z-10 w-full max-w-sm">
+                                <div className="bg-white/5 backdrop-blur border border-white/10 rounded-lg p-4 mb-4 transform -rotate-6 transition-transform hover:rotate-0 duration-500 origin-bottom-left shadow-lg">
+                                    <div className="grid grid-cols-4 gap-2 mb-2">
+                                        {Array.from({ length: 4 }).map((_, idx) => (
+                                            <div key={idx} className="h-2 bg-white/10 rounded col-span-1"></div>
+                                        ))}
+                                    </div>
+                                    <div className="space-y-2">
+                                        {Array.from({ length: 3 }).map((_, idx) => (
+                                            <div key={idx} className="h-1 bg-white/5 rounded w-full"></div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex justify-center my-2">
+                                    <span className="material-symbols-outlined text-[#13a4ec] text-3xl animate-bounce">arrow_downward</span>
+                                </div>
+                                <div className="bg-[#101622] border border-[#13a4ec]/50 rounded-lg p-4 shadow-[0_0_30px_rgba(19,164,236,0.15)] transform rotate-2 transition-transform hover:rotate-0 duration-500 origin-top-right">
+                                    <div className="flex justify-between items-end mb-4">
+                                        <div className="w-16 h-16 rounded-full border-4 border-[#13a4ec]/20 border-t-[#13a4ec] flex items-center justify-center">
+                                            <span className="text-xs font-bold text-white">98%</span>
+                                        </div>
+                                        <div className="space-y-1 text-right">
+                                            <div className="h-2 w-12 bg-[#13a4ec] ml-auto rounded"></div>
+                                            <div className="h-1 w-8 bg-gray-600 ml-auto rounded"></div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {Array.from({ length: 3 }).map((_, idx) => (
+                                            <div key={idx} className="h-8 bg-[#13a4ec]/10 rounded border border-[#13a4ec]/20"></div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Pricing */}
+            <section className="py-24 px-6 relative overflow-hidden" id="pricing">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#13a4ec]/5 rounded-full blur-3xl pointer-events-none"></div>
+                <div className="max-w-7xl mx-auto relative z-10">
+                    <div className="text-center mb-16">
+                        <h2 className="text-3xl md:text-4xl font-bold mb-4">Simple, transparent pricing</h2>
+                        <p className="text-gray-400">Choose the plan that fits your investment volume.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto items-center">
+                        {['Starter', 'Growth', 'Enterprise'].map((tier) => (
+                            <div
+                                key={tier}
+                                className={`rounded-xl p-8 ${tier === 'Growth' ? 'bg-[#1c2930] border border-[#13a4ec]/50 shadow-[0_0_20px_rgba(19,164,236,0.3)]' : 'bg-[#1c2930]/50 border border-[#2a3b45]'}`}
+                            >
+                                {tier === 'Growth' && (
+                                    <div className="-mt-10 mb-4 inline-block bg-[#13a4ec] text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">Most Popular</div>
+                                )}
+                                <h3 className="text-lg font-medium text-white mb-2">{tier}</h3>
+                                <div className="flex items-baseline gap-1 mb-6">
+                                    <span className="text-3xl font-bold">{tier === 'Starter' ? '$99' : tier === 'Growth' ? '$249' : 'Custom'}</span>
+                                    {tier !== 'Enterprise' && <span className="text-gray-400">/mo</span>}
+                                </div>
+                                <p className="text-sm text-gray-400 mb-8">
+                                    {tier === 'Starter'
+                                        ? 'For individual investors looking at occasional deals.'
+                                        : tier === 'Growth'
+                                            ? 'For active funds and syndicators scaling up.'
+                                            : 'For large institutions requiring API access.'}
+                                </p>
+                                <button className={`w-full py-2.5 rounded-lg font-medium transition-colors mb-8 ${tier === 'Growth' ? 'bg-[#13a4ec] hover:bg-[#0f8bc7] text-white font-bold shadow-lg shadow-[#13a4ec]/20' : 'border border-[#2a3b45] hover:bg-white/5 text-white'}`}>
+                                    {tier === 'Enterprise' ? 'Contact Sales' : tier === 'Growth' ? 'Get Started' : 'Start Free Trial'}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* FAQ */}
+            <section className="py-24 px-6 bg-[#0d121b]">
+                <div className="max-w-3xl mx-auto">
+                    <h2 className="text-3xl font-bold mb-12 text-center">Frequently asked questions</h2>
+                    <div className="space-y-4">
+                        {[
+                            { q: 'Where do you source your data?', a: 'We aggregate data from over 50 public and private sources, including county tax records, reservation systems, and proprietary partnerships with major campground management software providers.' },
+                            { q: 'Can I customize the valuation parameters?', a: 'Absolutely. While our system provides defaults based on market averages, you can override cap rates, expense ratios, and occupancy projections to match your specific underwriting criteria.' },
+                            { q: 'Is there a free trial available?', a: 'Yes, we offer a 7-day free trial on the Starter and Growth plans so you can test drive the platform and run your first few reports at no cost.' }
+                        ].map((faq) => (
+                            <details key={faq.q} className="group bg-[#1c2930] rounded-lg border border-[#2a3b45] overflow-hidden">
+                                <summary className="flex justify-between items-center font-medium cursor-pointer list-none p-6 text-white hover:bg-white/5 transition-colors">
+                                    <span>{faq.q}</span>
+                                    <span className="transition group-open:rotate-180">
+                                        <span className="material-symbols-outlined">expand_more</span>
+                                    </span>
+                                </summary>
+                                <div className="text-gray-400 px-6 pb-6 text-sm leading-relaxed">
+                                    {faq.a}
+                                </div>
+                            </details>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Final CTA */}
+            <section className="py-32 px-6 relative overflow-hidden flex flex-col items-center justify-center text-center">
+                <div className="absolute inset-0 bg-gradient-to-br from-[#101622] via-[#0d2a3d] to-[#101622]"></div>
+                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-[#13a4ec]/10 via-transparent to-transparent opacity-50"></div>
+                <div className="relative z-10 max-w-4xl">
+                    <h2 className="text-4xl md:text-6xl font-bold mb-6 tracking-tight">Ready to underwrite your next park?</h2>
+                    <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">Join 500+ investors using RV Valuator to make data-driven decisions.</p>
+                    <motion.button
+                        className="h-14 px-10 rounded-full bg-[#13a4ec] text-white text-lg font-bold hover:bg-[#0f8bc7] transition-all shadow-[0_0_20px_rgba(19,164,236,0.3)]"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        type="button"
+                    >
+                        Book a Live Demo
+                    </motion.button>
+                </div>
+            </section>
+
+            {/* Footer */}
+            <footer className="bg-[#101622] border-t border-[#2a3b45] pt-16 pb-8 px-6">
+                <div className="max-w-7xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
+                        <div className="col-span-1">
+                            <div className="flex items-center gap-2 mb-6">
+                                <span className="material-symbols-outlined text-[#13a4ec] text-2xl">analytics</span>
+                                <span className="text-lg font-bold">RV Valuator</span>
+                            </div>
+                            <p className="text-gray-400 text-sm mb-6">The standard for RV park valuation and analytics.</p>
+                            <div className="flex gap-4">
+                                <a className="text-gray-400 hover:text-white" href="#"><span className="material-symbols-outlined text-xl">work</span></a>
+                                <a className="text-gray-400 hover:text-white" href="#"><span className="material-symbols-outlined text-xl">alternate_email</span></a>
+                            </div>
+                        </div>
+                        {['Product', 'Company', 'Legal'].map((title) => (
+                            <div key={title}>
+                                <h4 className="font-bold mb-6">{title}</h4>
+                                <ul className="space-y-4 text-sm text-gray-400">
+                                    {['Features', 'Pricing', 'API', 'Case Studies'].map((item) => (
+                                        <li key={`${title}-${item}`}>
+                                            <a className="hover:text-[#13a4ec] transition-colors" href="#">{item}</a>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="border-t border-[#2a3b45] pt-8 flex flex-col md:flex-row justify-between items-center text-sm text-gray-400">
+                        <p>© 2023 RV Valuator Inc. All rights reserved.</p>
+                        <div className="flex items-center gap-2 mt-4 md:mt-0">
+                            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                            Systems Operational
+                        </div>
+                    </div>
+                </div>
+            </footer>
         </div>
-      </main>
-    </div>
-  );
+    );
 }

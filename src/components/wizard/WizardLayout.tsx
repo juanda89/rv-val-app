@@ -218,6 +218,9 @@ export const WizardLayout = ({
                 if (json.project?.id) {
                     const newProjectId = json.project.id as string;
                     setProjectId(newProjectId);
+                    if (json.project?.spreadsheet_id) {
+                        setFormData((prev: any) => ({ ...prev, spreadsheet_id: json.project.spreadsheet_id }));
+                    }
                     // Sync the initial data
                     const results = await sync(data, newProjectId);
                     if (results) setOutputs(results);
@@ -252,7 +255,7 @@ export const WizardLayout = ({
         <div className="flex min-h-screen bg-[#111618] text-white">
             {/* Sidebar */}
             <div className="w-64 border-r border-[#283339] hidden md:flex flex-col p-6 sticky top-0 h-screen">
-                <Link href="/" className="flex items-center gap-2 mb-8 hover:opacity-90">
+                <Link href="/valuations" className="flex items-center gap-2 mb-8 hover:opacity-90">
                     <BarChart3 className="w-6 h-6 text-blue-500" />
                     <h1 className="font-bold text-xl">RV Valuations</h1>
                 </Link>
@@ -285,7 +288,7 @@ export const WizardLayout = ({
             </div>
 
             <div className="flex-1 flex flex-col lg:flex-row">
-                <ValuationUploadPanel onAutofill={handleAutofill} />
+                {currentStep !== 5 && <ValuationUploadPanel onAutofill={handleAutofill} />}
 
                 {/* Main Content */}
                 <div className="flex-1 flex flex-col">
@@ -293,7 +296,7 @@ export const WizardLayout = ({
                         <h2 className="text-lg font-semibold">{STEPS[currentStep - 1].title}</h2>
                         <div className="flex gap-4">
                             {currentStep === 1 && !projectId ? (
-                                <Button variant="ghost" className="text-gray-400" onClick={() => router.push('/')}>
+                                <Button variant="ghost" className="text-gray-400" onClick={() => router.push('/valuations')}>
                                     Cancel
                                 </Button>
                             ) : (
@@ -315,7 +318,7 @@ export const WizardLayout = ({
                         {currentStep === 2 && <Step2RentRoll onDataChange={handleDataChange} initialData={formData} />}
                     {currentStep === 3 && <Step3PnL onDataChange={handleDataChange} initialData={formData} projectId={projectId} />}
                         {currentStep === 4 && <Step4Taxes onDataChange={handleDataChange} initialData={formData} address={formData.address} />}
-                        {currentStep === 5 && <Dashboard outputs={outputs} inputs={formData} onInputChange={handleDataChange} />}
+                        {currentStep === 5 && <Dashboard outputs={outputs} inputs={formData} onInputChange={handleDataChange} shareId={formData?.spreadsheet_id} />}
                     </main>
                 </div>
             </div>

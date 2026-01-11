@@ -13,7 +13,7 @@ export default function AuthCallbackPage() {
         // creating an auth listener will catch the session update
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' || session) {
-                router.replace('/'); // Redirect to dashboard
+                router.replace('/valuations'); // Redirect to dashboard
             }
         });
 

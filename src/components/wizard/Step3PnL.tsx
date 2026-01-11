@@ -147,6 +147,19 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
         expenses: expenseItems.reduce((sum, item) => sum + item.amount, 0),
     }), [incomeItems, expenseItems]);
 
+    const groupedTotals = useMemo(() => ({
+        income: groupedIncome.reduce((sum, item) => sum + Number(item.total || 0), 0),
+        expenses: groupedExpenses.reduce((sum, item) => sum + Number(item.total || 0), 0),
+    }), [groupedIncome, groupedExpenses]);
+
+    const totalsMatch = useMemo(() => {
+        const within = (a: number, b: number) => Math.abs(a - b) < 0.01;
+        return {
+            income: within(totals.income, groupedTotals.income),
+            expenses: within(totals.expenses, groupedTotals.expenses),
+        };
+    }, [totals.income, totals.expenses, groupedTotals.income, groupedTotals.expenses]);
+
     const handleAddIncome = () => {
         const name = incomeName.trim();
         if (!name) return;
@@ -321,6 +334,33 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                     {groupingStatus === 'loading' ? 'Grouping...' : 'Group / Categorize with AI'}
                 </Button>
             </div>
+
+            {(groupedIncome.length > 0 || groupedExpenses.length > 0) && (
+                <div className="rounded-xl border border-[#283339] bg-[#141b21] p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs text-gray-400">Income Totals</p>
+                            <p className="text-sm text-white">
+                                Original: ${totals.income.toLocaleString()} · Grouped: ${groupedTotals.income.toLocaleString()}
+                            </p>
+                        </div>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${totalsMatch.income ? 'bg-emerald-500/15 text-emerald-300' : 'bg-yellow-500/15 text-yellow-200'}`}>
+                            {totalsMatch.income ? 'Matched' : 'Mismatch'}
+                        </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs text-gray-400">Expense Totals</p>
+                            <p className="text-sm text-white">
+                                Original: ${totals.expenses.toLocaleString()} · Grouped: ${groupedTotals.expenses.toLocaleString()}
+                            </p>
+                        </div>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${totalsMatch.expenses ? 'bg-emerald-500/15 text-emerald-300' : 'bg-yellow-500/15 text-yellow-200'}`}>
+                            {totalsMatch.expenses ? 'Matched' : 'Mismatch'}
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {groupingStatus === 'error' && (
                 <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">

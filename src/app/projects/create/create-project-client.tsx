@@ -42,7 +42,7 @@ export const CreateProjectClient = () => {
             setProjectError(null);
             const { data, error } = await supabase
                 .from('projects')
-                .select('id, name, address')
+                .select('id, name, address, spreadsheet_id')
                 .eq('id', projectIdParam)
                 .single();
 
@@ -53,7 +53,7 @@ export const CreateProjectClient = () => {
                 setProjectError('Project not found');
                 setProjectData(null);
             } else {
-                setProjectData({ name: data.name, address: data.address });
+                setProjectData({ name: data.name, address: data.address, spreadsheet_id: data.spreadsheet_id });
             }
             setProjectLoading(false);
         };
@@ -81,7 +81,7 @@ export const CreateProjectClient = () => {
                     <p>{projectError}</p>
                     <button
                         className="px-4 py-2 rounded bg-[#13a4ec] text-white"
-                        onClick={() => router.push('/')}
+                        onClick={() => router.push('/valuations')}
                     >
                         Back to projects
                     </button>
