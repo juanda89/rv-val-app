@@ -1,0 +1,144 @@
+"use client";
+
+import React, { useState } from 'react';
+import usePlacesAutocomplete, {
+    getGeocode,
+    getLatLng,
+} from "use-places-autocomplete";
+import { Input } from "@/components/ui/Input";
+
+interface Step1Props {
+    onDataChange: (data: any) => void;
+    initialData?: any;
+}
+
+const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
+    const {
+        ready,
+        value,
+        suggestions: { status, data },
+        setValue,
+        clearSuggestions,
+    } = usePlacesAutocomplete({
+        debounce: 300,
+        defaultValue: initialData?.address || "",
+    });
+
+    const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(initialData?.lat ? { lat: initialData.lat, lng: initialData.lng } : null);
+
+    const handleSelect = async (address: string) => {
+        setValue(address, false);
+        clearSuggestions();
+
+        try {
+            const results = await getGeocode({ address });
+            const { lat, lng } = await getLatLng(results[0]);
+            setCoordinates({ lat, lng });
+
+            onDataChange({
+                address,
+                lat,
+                lng,
+                // Mock demographics for now
+                population_1mile: 12500,
+                median_income: 65000
+            });
+        } catch (error) {
+            console.error("Error: ", error);
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col gap-3">
+                <h2 className="text-xl font-bold text-white">Location & Details</h2>
+                <p className="text-sm text-gray-400">Search for the RV park location to auto-populate data.</p>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Property Address</label>
+                <div className="relative">
+                    <Input
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        disabled={!ready}
+                        placeholder="Search address..."
+                        className="w-full bg-[#283339] border-transparent text-white focus:ring-blue-500"
+                    />
+                    {status === "OK" && (
+                        <ul className="absolute z-10 w-full bg-[#1a2228] border border-[#283339] rounded-md mt-1 max-h-60 overflow-auto shadow-lg">
+                            {data.map(({ place_id, description }) => (
+                                <li
+                                    key={place_id}
+                                    onClick={() => handleSelect(description)}
+                                    className="cursor-pointer px-4 py-2 hover:bg-[#283339] text-white text-sm"
+                                >
+                                    {description}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            </div>
+
+            {/* Map Preview */}
+            <div className="rounded-xl overflow-hidden h-64 bg-[#0e1214] border border-[#283339] relative flex items-center justify-center">
+                {coordinates ? (
+                    <img
+                        src={`https://maps.googleapis.com/maps/api/staticmap?center=${coordinates.lat},${coordinates.lng}&zoom=17&size=600x300&maptype=satellite&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}`}
+                        alt="Satellite View"
+                        className="w-full h-full object-cover"
+                    />
+                ) : (
+                    <div className="text-gray-500 text-sm">Enter address to see map</div>
+                )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Population (1 mi)</label>
+                    <Input disabled value={initialData?.population_1mile || ""} placeholder="Auto-fetched" className="bg-[#1a2228]" />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Median Income</label>
+                    <Input disabled value={initialData?.median_income || ""} placeholder="Auto-fetched" className="bg-[#1a2228]" />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData }) => {
+    const hasApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder');
+
+    if (!hasApiKey) {
+        return (
+            <div className="space-y-6">
+                <div className="flex flex-col gap-3">
+                    <h2 className="text-xl font-bold text-white">Location & Details</h2>
+                    <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-lg">
+                        <h3 className="text-red-400 font-bold flex items-center gap-2">
+                            <span className="material-symbols-outlined">warning</span>
+                            Missing Google Maps API Key
+                        </h3>
+                        <p className="text-sm text-red-300 mt-2">
+                            The Google Maps API key is missing or invalid. Please update <code>.env.local</code>.
+                        </p>
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Manual Property Address</label>
+                    <Input
+                        value={initialData?.address || ''}
+                        onChange={e => onDataChange({ address: e.target.value })}
+                        placeholder="Enter address manually..."
+                        className="w-full bg-[#283339] border-transparent text-white"
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    return <GooglePlacesInput onDataChange={onDataChange} initialData={initialData} />;
+};
