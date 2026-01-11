@@ -12,11 +12,11 @@ const getBaseUrl = (req: Request) => {
 };
 
 export async function GET(req: Request) {
+    const baseUrl = getBaseUrl(req);
     try {
         const { searchParams } = new URL(req.url);
         const code = searchParams.get('code');
         const error = searchParams.get('error');
-        const baseUrl = getBaseUrl(req);
 
         console.log('OAuth callback received:', { code: !!code, error });
 
