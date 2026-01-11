@@ -3,16 +3,25 @@ import { google } from 'googleapis';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
+const getBaseUrl = (req: Request) => {
+    const envUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL;
+    if (envUrl) return envUrl.startsWith('http') ? envUrl : `https://${envUrl}`;
+    const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
+    const proto = req.headers.get('x-forwarded-proto') ?? 'https';
+    return host ? `${proto}://${host}` : 'http://localhost:3000';
+};
+
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
         const code = searchParams.get('code');
         const error = searchParams.get('error');
+        const baseUrl = getBaseUrl(req);
 
         console.log('OAuth callback received:', { code: !!code, error });
 
         if (error) {
-            return NextResponse.redirect(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/projects/create?error=access_denied`);
+            return NextResponse.redirect(`${baseUrl}/projects/create?error=access_denied`);
         }
 
         if (!code) {
@@ -20,9 +29,7 @@ export async function GET(req: Request) {
         }
 
         // Exchange code for tokens
-        const redirectUri =
-            process.env.GOOGLE_OAUTH_REDIRECT_URI ||
-            `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/google/callback`;
+        const redirectUri = `${baseUrl}/api/auth/google/callback`;
         const oauth2Client = new google.auth.OAuth2(
             process.env.PERSONALCLIENT,
             process.env.PERSONALSECRET,
@@ -61,7 +68,7 @@ export async function GET(req: Request) {
 
         if (!user) {
             console.error('No user found, redirecting to login');
-            return NextResponse.redirect(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/login?error=no_session`);
+            return NextResponse.redirect(`${baseUrl}/login?error=no_session`);
         }
 
         // Store tokens in Supabase
@@ -82,10 +89,10 @@ export async function GET(req: Request) {
         console.log('Tokens stored successfully, redirecting to projects/create');
 
         // Redirect back to project creation
-        return NextResponse.redirect(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/projects/create?drive_connected=true`);
+        return NextResponse.redirect(`${baseUrl}/projects/create?drive_connected=true`);
 
     } catch (error: any) {
         console.error('OAuth callback error:', error);
-        return NextResponse.redirect(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/projects/create?error=oauth_failed`);
+        return NextResponse.redirect(`${baseUrl}/projects/create?error=oauth_failed`);
     }
 }

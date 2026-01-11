@@ -28,9 +28,9 @@ export const getDriveClient = async () => {
 };
 
 export const getDriveClientWithOAuth = (accessToken: string, refreshToken?: string) => {
-    const redirectUri =
-        process.env.GOOGLE_OAUTH_REDIRECT_URI ||
-        `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/google/callback`;
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    const redirectUri = `${baseUrl}/api/auth/google/callback`;
     const oauth2Client = new google.auth.OAuth2(
         process.env.PERSONALCLIENT,
         process.env.PERSONALSECRET,
@@ -46,9 +46,9 @@ export const getDriveClientWithOAuth = (accessToken: string, refreshToken?: stri
 };
 
 export const getSheetsClientWithOAuth = (accessToken: string, refreshToken?: string) => {
-    const redirectUri =
-        process.env.GOOGLE_OAUTH_REDIRECT_URI ||
-        `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/google/callback`;
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    const redirectUri = `${baseUrl}/api/auth/google/callback`;
     const oauth2Client = new google.auth.OAuth2(
         process.env.PERSONALCLIENT,
         process.env.PERSONALSECRET,

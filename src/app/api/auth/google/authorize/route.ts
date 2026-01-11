@@ -1,12 +1,19 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 
-export async function GET() {
+const getBaseUrl = (req: Request) => {
+    const envUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL;
+    if (envUrl) return envUrl.startsWith('http') ? envUrl : `https://${envUrl}`;
+    const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
+    const proto = req.headers.get('x-forwarded-proto') ?? 'https';
+    return host ? `${proto}://${host}` : 'http://localhost:3000';
+};
+
+export async function GET(req: Request) {
     const clientId = process.env.PERSONALCLIENT;
     const clientSecret = process.env.PERSONALSECRET;
-    const redirectUri =
-        process.env.GOOGLE_OAUTH_REDIRECT_URI ||
-        `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/google/callback`;
+    const baseUrl = getBaseUrl(req);
+    const redirectUri = `${baseUrl}/api/auth/google/callback`;
 
     console.log('OAuth Config:', { clientId: clientId?.substring(0, 20), redirectUri });
 
