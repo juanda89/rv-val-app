@@ -1,11 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getDriveClient } from '@/lib/google';
-
-const isNotFoundError = (error: any) => {
-    const message = typeof error?.message === 'string' ? error.message.toLowerCase() : '';
-    return error?.code === 404 || message.includes('not found');
-};
 
 export async function POST(req: Request) {
     try {
@@ -37,16 +31,36 @@ export async function POST(req: Request) {
         }
 
         if (project.spreadsheet_id) {
-            try {
-                const drive = await getDriveClient();
-                await drive.files.delete({ fileId: project.spreadsheet_id });
-            } catch (driveError: any) {
-                if (!isNotFoundError(driveError)) {
-                    return NextResponse.json(
-                        { error: 'Failed to delete Drive file' },
-                        { status: 500 }
-                    );
-                }
+            const webhookUrl = 'https://n8n-boominbm-u44048.vm.elestio.app/webhook/delete-file';
+            const webhookResponse = await fetch(webhookUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ fileId: project.spreadsheet_id }),
+            });
+
+            if (!webhookResponse.ok) {
+                const errorText = await webhookResponse.text();
+                return NextResponse.json(
+                    { error: 'Failed to delete Drive file', details: errorText },
+                    { status: 500 }
+                );
+            }
+
+            const webhookData = await webhookResponse.json().catch(() => ({}));
+            const success =
+                webhookData?.success === true ||
+                webhookData?.success === 'true';
+            const deleted =
+                webhookData?.deleted === true ||
+                webhookData?.status === 'deleted';
+
+            if (!success && !deleted) {
+                return NextResponse.json(
+                    { error: 'Failed to delete Drive file', details: webhookData },
+                    { status: 500 }
+                );
             }
         }
 

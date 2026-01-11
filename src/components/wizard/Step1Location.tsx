@@ -61,6 +61,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
 
     const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(initialData?.lat ? { lat: initialData.lat, lng: initialData.lng } : null);
     const [projectName, setProjectName] = useState(initialData?.name || '');
+    const lastGeocodedAddressRef = React.useRef<string>('');
 
     React.useEffect(() => {
         if (typeof initialData?.name === 'string') {
@@ -73,6 +74,46 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
             setCoordinates({ lat: initialData.lat, lng: initialData.lng });
         }
     }, [initialData?.name, initialData?.address, initialData?.lat, initialData?.lng, setValue]);
+
+    React.useEffect(() => {
+        const address = initialData?.address;
+        if (!address || !ready) return;
+        if (initialData?.lat && initialData?.lng) return;
+        if (lastGeocodedAddressRef.current === address) return;
+
+        lastGeocodedAddressRef.current = address;
+        let isActive = true;
+
+        getGeocode({ address })
+            .then((results) => {
+                if (!isActive || !results?.[0]) return;
+                const { lat, lng } = getLatLng(results[0]);
+                setCoordinates({ lat, lng });
+
+                const updates: Record<string, any> = {};
+                if (!initialData?.lat && !initialData?.lng) {
+                    updates.lat = lat;
+                    updates.lng = lng;
+                }
+
+                const city = extractCityFromGeocode(results[0]) || extractCityFromAddressString(address);
+                const county = extractCountyFromGeocode(results[0]);
+
+                if (!initialData?.city && city) updates.city = city;
+                if (!initialData?.county && county) updates.county = county;
+
+                if (Object.keys(updates).length > 0) {
+                    onDataChange(updates);
+                }
+            })
+            .catch((error) => {
+                console.error('Geocode failed:', error);
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [initialData?.address, initialData?.lat, initialData?.lng, initialData?.city, initialData?.county, onDataChange, ready]);
 
     const handleSelect = async (address: string) => {
         setValue(address, false);

@@ -27,7 +27,7 @@ export const getDriveClient = async () => {
     return google.drive({ version: 'v3', auth });
 };
 
-export const getDriveClientWithOAuth = (accessToken: string) => {
+export const getDriveClientWithOAuth = (accessToken: string, refreshToken?: string) => {
     const redirectUri =
         process.env.GOOGLE_OAUTH_REDIRECT_URI ||
         `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/google/callback`;
@@ -37,12 +37,15 @@ export const getDriveClientWithOAuth = (accessToken: string) => {
         redirectUri
     );
 
-    oauth2Client.setCredentials({ access_token: accessToken });
+    oauth2Client.setCredentials({
+        access_token: accessToken,
+        refresh_token: refreshToken
+    });
 
     return google.drive({ version: 'v3', auth: oauth2Client });
 };
 
-export const getSheetsClientWithOAuth = (accessToken: string) => {
+export const getSheetsClientWithOAuth = (accessToken: string, refreshToken?: string) => {
     const redirectUri =
         process.env.GOOGLE_OAUTH_REDIRECT_URI ||
         `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/auth/google/callback`;
@@ -52,7 +55,10 @@ export const getSheetsClientWithOAuth = (accessToken: string) => {
         redirectUri
     );
 
-    oauth2Client.setCredentials({ access_token: accessToken });
+    oauth2Client.setCredentials({
+        access_token: accessToken,
+        refresh_token: refreshToken
+    });
 
     return google.sheets({ version: 'v4', auth: oauth2Client });
 };
