@@ -36,18 +36,29 @@ const toNumber = (value: any) => {
     return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const normalizeAssignments = (items: any[], validKeys: string[]) =>
+    Array.isArray(items)
+        ? items
+            .map((item) => ({
+                id: String(item?.id || '').trim(),
+                category: String(item?.category || '').trim(),
+            }))
+            .filter((item) => item.id && validKeys.includes(item.category))
+        : [];
+
 const sumItems = (items: { amount: number }[]) =>
     items.reduce((sum, item) => sum + toNumber(item.amount), 0);
 
 const buildGroupingPrompt = (
-    incomeItems: { name: string; amount: number }[],
-    expenseItems: { name: string; amount: number }[],
+    incomeItems: { id: string; name: string; amount: number }[],
+    expenseItems: { id: string; name: string; amount: number }[],
     extraInstructions?: string
 ) => `
 You are an expert RV park valuation analyst.
 Group the following income and expense line items into the exact categories listed.
 Return ONLY valid JSON (no markdown, no extra text).
 Use numbers for totals. Do not omit categories; use 0 if missing.
+Also assign each original line item to a category key.
 
 Income categories:
 ${INCOME_CATEGORIES.map(cat => `- ${cat.key}`).join('\n')}
@@ -56,15 +67,17 @@ Expense categories:
 ${EXPENSE_CATEGORIES.map(cat => `- ${cat.key}`).join('\n')}
 
 Income items:
-${incomeItems.map(item => `- ${item.name}: ${item.amount}`).join('\n')}
+${incomeItems.map(item => `- ${item.id} | ${item.name}: ${item.amount}`).join('\n')}
 
 Expense items:
-${expenseItems.map(item => `- ${item.name}: ${item.amount}`).join('\n')}
+${expenseItems.map(item => `- ${item.id} | ${item.name}: ${item.amount}`).join('\n')}
 
 Return JSON like:
 {
   "income": { "rental_income": 0, "rv_income": 0, "storage": 0, "late_fees": 0, "utility_reimbursements": 0, "other_income": 0 },
-  "expenses": { "payroll": 0, "utilities": 0, "rm": 0, "advertising": 0, "ga": 0, "insurance": 0, "re_taxes": 0, "mgmt_fee": 0, "reserves": 0 }
+  "expenses": { "payroll": 0, "utilities": 0, "rm": 0, "advertising": 0, "ga": 0, "insurance": 0, "re_taxes": 0, "mgmt_fee": 0, "reserves": 0 },
+  "income_assignments": [{ "id": "income-item-id", "category": "rental_income" }],
+  "expense_assignments": [{ "id": "expense-item-id", "category": "payroll" }]
 }
 
 ${extraInstructions ? `Additional correction instructions:\n${extraInstructions}` : ''}
@@ -152,14 +165,24 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
         }
 
-        const incomeList = Array.isArray(incomeItems) ? incomeItems : [];
-        const expenseList = Array.isArray(expenseItems) ? expenseItems : [];
+        const incomeList = (Array.isArray(incomeItems) ? incomeItems : []).map((item, index) => ({
+            id: String(item?.id || `income-${index}`),
+            name: String(item?.name || '').trim(),
+            amount: toNumber(item?.amount),
+        }));
+        const expenseList = (Array.isArray(expenseItems) ? expenseItems : []).map((item, index) => ({
+            id: String(item?.id || `expense-${index}`),
+            name: String(item?.name || '').trim(),
+            amount: toNumber(item?.amount),
+        }));
 
         const originalIncomeTotal = sumItems(incomeList);
         const originalExpenseTotal = sumItems(expenseList);
 
         let groupedIncomeMap: Record<string, number> = {};
         let groupedExpenseMap: Record<string, number> = {};
+        let incomeAssignments: { id: string; category: string }[] = [];
+        let expenseAssignments: { id: string; category: string }[] = [];
         let correctionInstructions = '';
 
         for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -179,6 +202,15 @@ export async function POST(req: Request) {
             EXPENSE_CATEGORIES.forEach((cat) => {
                 groupedExpenseMap[cat.key] = toNumber(grouped?.expenses?.[cat.key]);
             });
+
+            incomeAssignments = normalizeAssignments(
+                grouped?.income_assignments,
+                INCOME_CATEGORIES.map((cat) => cat.key)
+            );
+            expenseAssignments = normalizeAssignments(
+                grouped?.expense_assignments,
+                EXPENSE_CATEGORIES.map((cat) => cat.key)
+            );
 
             const groupedIncomeTotal = Object.values(groupedIncomeMap).reduce((sum, val) => sum + val, 0);
             const groupedExpenseTotal = Object.values(groupedExpenseMap).reduce((sum, val) => sum + val, 0);
@@ -211,13 +243,6 @@ export async function POST(req: Request) {
         const totalsMatch =
             Math.abs(groupedIncomeTotal - originalIncomeTotal) <= 0.01 &&
             Math.abs(groupedExpenseTotal - originalExpenseTotal) <= 0.01;
-
-        if (!totalsMatch) {
-            return NextResponse.json(
-                { error: 'Grouped totals do not match originals' },
-                { status: 500 }
-            );
-        }
 
         const groupedIncome = INCOME_CATEGORIES.map(cat => ({
             category: cat.label,
@@ -279,10 +304,25 @@ export async function POST(req: Request) {
             }
         });
 
-        return NextResponse.json({
+        const responsePayload: Record<string, any> = {
             groupedIncome,
-            groupedExpenses
-        });
+            groupedExpenses,
+            incomeAssignments,
+            expenseAssignments,
+            totalsMatch,
+            totals: {
+                originalIncome: originalIncomeTotal,
+                originalExpenses: originalExpenseTotal,
+                groupedIncome: groupedIncomeTotal,
+                groupedExpenses: groupedExpenseTotal,
+            },
+        };
+
+        if (!totalsMatch) {
+            responsePayload.message = 'Grouped totals do not match originals. Please adjust or regroup.';
+        }
+
+        return NextResponse.json(responsePayload);
     } catch (error: any) {
         console.error('P&L grouping failed:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });

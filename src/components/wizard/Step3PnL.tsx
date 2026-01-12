@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from "@/components/ui/Button";
 import { supabase } from '@/lib/supabaseClient';
+import { Trash2 } from 'lucide-react';
 
 interface PnlItem {
     id: string;
@@ -13,6 +14,11 @@ interface PnlItem {
 interface GroupedItem {
     category: string;
     total: number;
+}
+
+interface PnlAssignment {
+    id: string;
+    category: string;
 }
 
 interface Step3Props {
@@ -33,6 +39,16 @@ const toNumber = (value: string) => {
     return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const normalizeAssignments = (items: any[]): PnlAssignment[] => {
+    if (!Array.isArray(items)) return [];
+    return items
+        .map((item) => ({
+            id: String(item?.id || '').trim(),
+            category: String(item?.category || '').trim(),
+        }))
+        .filter((item) => item.id && item.category);
+};
+
 const normalizeItems = (items: any[]): PnlItem[] => {
     if (!Array.isArray(items)) return [];
     return items
@@ -47,6 +63,32 @@ const normalizeItems = (items: any[]): PnlItem[] => {
 const itemsSignature = (items: PnlItem[]) =>
     JSON.stringify(items.map(item => ({ name: item.name, amount: item.amount })));
 
+const formatCurrency = (value: number) => `$${value.toLocaleString()}`;
+
+const formatDelta = (value: number) => {
+    const absValue = Math.abs(value);
+    const sign = value >= 0 ? '+' : '-';
+    return `${sign}$${absValue.toLocaleString()}`;
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+    rental_income: 'Rental Income',
+    rv_income: 'RV Income',
+    storage: 'Storage',
+    late_fees: 'Late Fees',
+    utility_reimbursements: 'Utility Reimbursements',
+    other_income: 'Other Income',
+    payroll: 'Payroll',
+    utilities: 'Utilities',
+    rm: 'R&M',
+    advertising: 'Advertising',
+    ga: 'G&A',
+    insurance: 'Insurance',
+    re_taxes: 'RE Taxes',
+    mgmt_fee: 'Mgmt. Fee',
+    reserves: 'Reserves',
+};
+
 export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, projectId }) => {
     const [incomeItems, setIncomeItems] = useState<PnlItem[]>(() =>
         normalizeItems(initialData?.pnl_income_items || initialData?.income_items || [])
@@ -60,51 +102,63 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
     const [groupedExpenses, setGroupedExpenses] = useState<GroupedItem[]>(() =>
         Array.isArray(initialData?.pnl_grouped_expenses) ? initialData.pnl_grouped_expenses : []
     );
+    const [incomeAssignments, setIncomeAssignments] = useState<PnlAssignment[]>(() =>
+        normalizeAssignments(initialData?.pnl_income_assignments || [])
+    );
+    const [expenseAssignments, setExpenseAssignments] = useState<PnlAssignment[]>(() =>
+        normalizeAssignments(initialData?.pnl_expense_assignments || [])
+    );
 
     const [incomeName, setIncomeName] = useState('');
     const [incomeAmount, setIncomeAmount] = useState('');
     const [expenseName, setExpenseName] = useState('');
     const [expenseAmount, setExpenseAmount] = useState('');
-    const [groupingStatus, setGroupingStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+    const [groupingStatus, setGroupingStatus] = useState<'idle' | 'loading' | 'success' | 'warning' | 'error'>('idle');
     const [groupingMessage, setGroupingMessage] = useState('');
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
     const [syncMessage, setSyncMessage] = useState('');
+    const [groupedSyncStatus, setGroupedSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
+    const [groupedSyncMessage, setGroupedSyncMessage] = useState('');
+    const initialDataSignatureRef = useRef<string>('');
 
     useEffect(() => {
         const nextIncome = normalizeItems(initialData?.pnl_income_items || initialData?.income_items || []);
         const nextExpenses = normalizeItems(initialData?.pnl_expense_items || initialData?.expense_items || []);
         const nextGroupedIncome = Array.isArray(initialData?.pnl_grouped_income) ? initialData.pnl_grouped_income : [];
         const nextGroupedExpenses = Array.isArray(initialData?.pnl_grouped_expenses) ? initialData.pnl_grouped_expenses : [];
+        const nextIncomeAssignments = normalizeAssignments(initialData?.pnl_income_assignments || []);
+        const nextExpenseAssignments = normalizeAssignments(initialData?.pnl_expense_assignments || []);
 
-        setIncomeItems((prev) => (
-            itemsSignature(nextIncome) !== itemsSignature(prev) ? nextIncome : prev
-        ));
-        setExpenseItems((prev) => (
-            itemsSignature(nextExpenses) !== itemsSignature(prev) ? nextExpenses : prev
-        ));
-        setGroupedIncome((prev) => (
-            JSON.stringify(nextGroupedIncome) !== JSON.stringify(prev) ? nextGroupedIncome : prev
-        ));
-        setGroupedExpenses((prev) => (
-            JSON.stringify(nextGroupedExpenses) !== JSON.stringify(prev) ? nextGroupedExpenses : prev
-        ));
-    }, [
-        initialData?.pnl_income_items,
-        initialData?.income_items,
-        initialData?.pnl_expense_items,
-        initialData?.expense_items,
-        initialData?.pnl_grouped_income,
-        initialData?.pnl_grouped_expenses
-    ]);
+        const signature = JSON.stringify({
+            income: itemsSignature(nextIncome),
+            expenses: itemsSignature(nextExpenses),
+            groupedIncome: JSON.stringify(nextGroupedIncome),
+            groupedExpenses: JSON.stringify(nextGroupedExpenses),
+            incomeAssignments: JSON.stringify(nextIncomeAssignments),
+            expenseAssignments: JSON.stringify(nextExpenseAssignments),
+        });
+
+        if (signature === initialDataSignatureRef.current) return;
+        initialDataSignatureRef.current = signature;
+
+        setIncomeItems(nextIncome);
+        setExpenseItems(nextExpenses);
+        setGroupedIncome(nextGroupedIncome);
+        setGroupedExpenses(nextGroupedExpenses);
+        setIncomeAssignments(nextIncomeAssignments);
+        setExpenseAssignments(nextExpenseAssignments);
+    }, [initialData]);
 
     useEffect(() => {
         onDataChange({
             pnl_income_items: incomeItems,
             pnl_expense_items: expenseItems,
             pnl_grouped_income: groupedIncome,
-            pnl_grouped_expenses: groupedExpenses
+            pnl_grouped_expenses: groupedExpenses,
+            pnl_income_assignments: incomeAssignments,
+            pnl_expense_assignments: expenseAssignments
         });
-    }, [incomeItems, expenseItems, groupedIncome, groupedExpenses, onDataChange]);
+    }, [incomeItems, expenseItems, groupedIncome, groupedExpenses, incomeAssignments, expenseAssignments, onDataChange]);
 
     useEffect(() => {
         if (!projectId) return;
@@ -142,6 +196,43 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
         return () => clearTimeout(timeout);
     }, [projectId, incomeItems, expenseItems]);
 
+    useEffect(() => {
+        if (!projectId) return;
+        if (groupedIncome.length === 0 && groupedExpenses.length === 0) return;
+        setGroupedSyncStatus('syncing');
+        setGroupedSyncMessage('');
+        const timeout = setTimeout(async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token;
+
+                const response = await fetch('/api/pnl/grouped/sync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token ? `Bearer ${token}` : ''
+                    },
+                    body: JSON.stringify({
+                        projectId,
+                        groupedIncome,
+                        groupedExpenses
+                    })
+                });
+
+                const payload = await response.json();
+                if (!response.ok) {
+                    throw new Error(payload.error || 'Failed to sync grouped totals');
+                }
+                setGroupedSyncStatus('idle');
+            } catch (error: any) {
+                setGroupedSyncStatus('error');
+                setGroupedSyncMessage(error.message || 'Failed to sync grouped totals');
+            }
+        }, 500);
+
+        return () => clearTimeout(timeout);
+    }, [projectId, groupedIncome, groupedExpenses]);
+
     const totals = useMemo(() => ({
         income: incomeItems.reduce((sum, item) => sum + item.amount, 0),
         expenses: expenseItems.reduce((sum, item) => sum + item.amount, 0),
@@ -152,6 +243,8 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
         expenses: groupedExpenses.reduce((sum, item) => sum + Number(item.total || 0), 0),
     }), [groupedIncome, groupedExpenses]);
 
+    const hasGrouped = groupedIncome.length > 0 || groupedExpenses.length > 0;
+
     const totalsMatch = useMemo(() => {
         const within = (a: number, b: number) => Math.abs(a - b) < 0.01;
         return {
@@ -159,6 +252,49 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
             expenses: within(totals.expenses, groupedTotals.expenses),
         };
     }, [totals.income, totals.expenses, groupedTotals.income, groupedTotals.expenses]);
+
+    const overallMatch = hasGrouped && totalsMatch.income && totalsMatch.expenses;
+
+    const incomeDelta = groupedTotals.income - totals.income;
+    const expenseDelta = groupedTotals.expenses - totals.expenses;
+
+    const incomeAssignmentMap = useMemo(() => (
+        new Map(incomeAssignments.map((item) => [item.id, item.category]))
+    ), [incomeAssignments]);
+    const expenseAssignmentMap = useMemo(() => (
+        new Map(expenseAssignments.map((item) => [item.id, item.category]))
+    ), [expenseAssignments]);
+
+    const getCategoryLabel = (category?: string) => {
+        if (!category) return '';
+        return CATEGORY_LABELS[category] || category;
+    };
+
+    useEffect(() => {
+        if (!hasGrouped || groupingStatus === 'loading' || groupingStatus === 'error') return;
+        if (overallMatch && groupingStatus === 'warning') {
+            setGroupingStatus('success');
+            setGroupingMessage('Totals match. You can continue.');
+        }
+        if (!overallMatch && groupingStatus === 'success') {
+            setGroupingStatus('warning');
+            setGroupingMessage('Totals no longer match originals. Please regroup.');
+        }
+    }, [hasGrouped, overallMatch, groupingStatus]);
+
+    const handleGroupedIncomeChange = (index: number, value: string) => {
+        const nextValue = toNumber(value);
+        setGroupedIncome((prev) => prev.map((item, idx) => (
+            idx === index ? { ...item, total: nextValue } : item
+        )));
+    };
+
+    const handleGroupedExpenseChange = (index: number, value: string) => {
+        const nextValue = toNumber(value);
+        setGroupedExpenses((prev) => prev.map((item, idx) => (
+            idx === index ? { ...item, total: nextValue } : item
+        )));
+    };
 
     const handleAddIncome = () => {
         const name = incomeName.trim();
@@ -223,10 +359,20 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                 throw new Error(payload.error || 'Failed to group items');
             }
 
-            setGroupedIncome(payload.groupedIncome || []);
-            setGroupedExpenses(payload.groupedExpenses || []);
-            setGroupingStatus('success');
-            setGroupingMessage('Grouping complete. Categories have been updated.');
+            const nextGroupedIncome = payload.groupedIncome || [];
+            const nextGroupedExpenses = payload.groupedExpenses || [];
+            setGroupedIncome(nextGroupedIncome);
+            setGroupedExpenses(nextGroupedExpenses);
+            setIncomeAssignments(normalizeAssignments(payload.incomeAssignments || []));
+            setExpenseAssignments(normalizeAssignments(payload.expenseAssignments || []));
+
+            if (payload.totalsMatch) {
+                setGroupingStatus('success');
+                setGroupingMessage('Grouping complete. Totals match.');
+            } else {
+                setGroupingStatus('warning');
+                setGroupingMessage(payload.message || 'Grouped totals do not match originals.');
+            }
         } catch (error: any) {
             setGroupingStatus('error');
             setGroupingMessage(error.message || 'Grouping failed');
@@ -240,6 +386,113 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                 <p className="text-sm text-slate-500 dark:text-gray-400">
                     Add income and expense line items manually, or review items imported from your document upload.
                 </p>
+            </div>
+
+            <div
+                className={`rounded-xl border p-4 sticky top-20 z-10 transition-colors ${
+                    hasGrouped
+                        ? overallMatch
+                            ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10'
+                            : 'border-red-200 bg-red-50 dark:border-red-500/40 dark:bg-red-500/10'
+                        : 'border-slate-200 bg-white dark:border-[#283339] dark:bg-[#141b21]'
+                }`}
+            >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-3 flex-1">
+                        <div>
+                            <p className="text-xs text-slate-500 dark:text-gray-400">Original vs Grouped Totals</p>
+                            <p className="text-sm text-slate-900 dark:text-white">
+                                Grouping is required to continue. Review the totals below.
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="rounded-lg bg-white/80 dark:bg-[#1a2228] border border-slate-200/70 dark:border-white/10 px-3 py-2">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs font-semibold text-slate-600 dark:text-gray-300">Income</p>
+                                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                                        !hasGrouped
+                                            ? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-gray-300'
+                                            : totalsMatch.income
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200'
+                                                : 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-200'
+                                    }`}>
+                                        {!hasGrouped ? 'Pending' : totalsMatch.income ? 'Matched' : 'Mismatch'}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-900 dark:text-white">
+                                    Original: {formatCurrency(totals.income)} · Grouped: {hasGrouped ? formatCurrency(groupedTotals.income) : '--'}
+                                </p>
+                                <p className={`text-xs ${
+                                    !hasGrouped
+                                        ? 'text-slate-500 dark:text-gray-400'
+                                        : totalsMatch.income
+                                            ? 'text-emerald-600 dark:text-emerald-300'
+                                            : 'text-red-600 dark:text-red-300'
+                                }`}>
+                                    Difference: {hasGrouped ? formatDelta(incomeDelta) : '--'}
+                                </p>
+                            </div>
+                            <div className="rounded-lg bg-white/80 dark:bg-[#1a2228] border border-slate-200/70 dark:border-white/10 px-3 py-2">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs font-semibold text-slate-600 dark:text-gray-300">Expenses</p>
+                                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                                        !hasGrouped
+                                            ? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-gray-300'
+                                            : totalsMatch.expenses
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200'
+                                                : 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-200'
+                                    }`}>
+                                        {!hasGrouped ? 'Pending' : totalsMatch.expenses ? 'Matched' : 'Mismatch'}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-slate-900 dark:text-white">
+                                    Original: {formatCurrency(totals.expenses)} · Grouped: {hasGrouped ? formatCurrency(groupedTotals.expenses) : '--'}
+                                </p>
+                                <p className={`text-xs ${
+                                    !hasGrouped
+                                        ? 'text-slate-500 dark:text-gray-400'
+                                        : totalsMatch.expenses
+                                            ? 'text-emerald-600 dark:text-emerald-300'
+                                            : 'text-red-600 dark:text-red-300'
+                                }`}>
+                                    Difference: {hasGrouped ? formatDelta(expenseDelta) : '--'}
+                                </p>
+                            </div>
+                        </div>
+                        {groupingStatus === 'warning' && (
+                            <p className="text-xs text-red-600 dark:text-red-300">{groupingMessage}</p>
+                        )}
+                        {groupingStatus === 'error' && (
+                            <p className="text-xs text-red-600 dark:text-red-300">{groupingMessage}</p>
+                        )}
+                        {groupingStatus === 'success' && (
+                            <p className="text-xs text-emerald-600 dark:text-emerald-300">{groupingMessage}</p>
+                        )}
+                        {syncStatus === 'error' && (
+                            <p className="text-xs text-yellow-700 dark:text-yellow-200">{syncMessage}</p>
+                        )}
+                        {groupedSyncStatus === 'error' && (
+                            <p className="text-xs text-yellow-700 dark:text-yellow-200">{groupedSyncMessage}</p>
+                        )}
+                    </div>
+                    <div className="flex flex-col gap-2 lg:items-end">
+                        <Button
+                            onClick={handleGroupWithAi}
+                            disabled={groupingStatus === 'loading'}
+                        >
+                            {groupingStatus === 'loading' ? 'Grouping...' : 'Group / Categorize with AI'}
+                        </Button>
+                        {groupingStatus === 'loading' && (
+                            <span className="text-xs text-slate-500 dark:text-gray-400">Analyzing and grouping P&amp;L data...</span>
+                        )}
+                        {hasGrouped && !overallMatch && (
+                            <span className="text-xs text-red-600 dark:text-red-300">Totals must match to continue.</span>
+                        )}
+                        {overallMatch && (
+                            <span className="text-xs text-emerald-600 dark:text-emerald-300">Totals match. You can continue.</span>
+                        )}
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -269,14 +522,28 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                             <div key={item.id} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
                                 <div>
                                     <p className="text-sm text-slate-900 dark:text-white">{item.name}</p>
-                                    <p className="text-xs text-slate-500 dark:text-gray-400">${item.amount.toLocaleString()}</p>
+                                    <p className="text-xs text-slate-500 dark:text-gray-400">{formatCurrency(item.amount)}</p>
                                 </div>
-                                <button
-                                    className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
-                                    onClick={() => handleRemoveIncome(item.id)}
-                                >
-                                    Remove
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {hasGrouped && (
+                                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                            incomeAssignmentMap.get(item.id)
+                                                ? 'bg-slate-200 text-slate-700 dark:bg-white/10 dark:text-gray-200'
+                                                : 'bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-gray-400'
+                                        }`}>
+                                            {incomeAssignmentMap.get(item.id)
+                                                ? getCategoryLabel(incomeAssignmentMap.get(item.id))
+                                                : 'Unassigned'}
+                                        </span>
+                                    )}
+                                    <button
+                                        className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+                                        onClick={() => handleRemoveIncome(item.id)}
+                                        aria-label="Remove income item"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -308,98 +575,64 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                             <div key={item.id} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
                                 <div>
                                     <p className="text-sm text-slate-900 dark:text-white">{item.name}</p>
-                                    <p className="text-xs text-slate-500 dark:text-gray-400">${item.amount.toLocaleString()}</p>
+                                    <p className="text-xs text-slate-500 dark:text-gray-400">{formatCurrency(item.amount)}</p>
                                 </div>
-                                <button
-                                    className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
-                                    onClick={() => handleRemoveExpense(item.id)}
-                                >
-                                    Remove
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {hasGrouped && (
+                                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                            expenseAssignmentMap.get(item.id)
+                                                ? 'bg-slate-200 text-slate-700 dark:bg-white/10 dark:text-gray-200'
+                                                : 'bg-slate-100 text-slate-500 dark:bg-white/5 dark:text-gray-400'
+                                        }`}>
+                                            {expenseAssignmentMap.get(item.id)
+                                                ? getCategoryLabel(expenseAssignmentMap.get(item.id))
+                                                : 'Unassigned'}
+                                        </span>
+                                    )}
+                                    <button
+                                        className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+                                        onClick={() => handleRemoveExpense(item.id)}
+                                        aria-label="Remove expense item"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
                 </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 dark:border-[#283339] bg-white dark:bg-[#141b21] p-4 flex items-center justify-between">
-                <div>
-                    <p className="text-xs text-slate-500 dark:text-gray-400">Original Totals</p>
-                    <p className="text-sm text-slate-900 dark:text-white">Income: ${totals.income.toLocaleString()} · Expenses: ${totals.expenses.toLocaleString()}</p>
-                </div>
-                <Button
-                    onClick={handleGroupWithAi}
-                    disabled={groupingStatus === 'loading'}
-                >
-                    {groupingStatus === 'loading' ? 'Grouping...' : 'Group / Categorize with AI'}
-                </Button>
-            </div>
-
-            {(groupedIncome.length > 0 || groupedExpenses.length > 0) && (
-                <div className="rounded-xl border border-slate-200 dark:border-[#283339] bg-white dark:bg-[#141b21] p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-slate-500 dark:text-gray-400">Income Totals</p>
-                            <p className="text-sm text-slate-900 dark:text-white">
-                                Original: ${totals.income.toLocaleString()} · Grouped: ${groupedTotals.income.toLocaleString()}
-                            </p>
-                        </div>
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${totalsMatch.income ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200'}`}>
-                            {totalsMatch.income ? 'Matched' : 'Mismatch'}
-                        </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-slate-500 dark:text-gray-400">Expense Totals</p>
-                            <p className="text-sm text-slate-900 dark:text-white">
-                                Original: ${totals.expenses.toLocaleString()} · Grouped: ${groupedTotals.expenses.toLocaleString()}
-                            </p>
-                        </div>
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${totalsMatch.expenses ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200'}`}>
-                            {totalsMatch.expenses ? 'Matched' : 'Mismatch'}
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            {groupingStatus === 'error' && (
-                <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-300">
-                    {groupingMessage}
-                </div>
-            )}
-
-            {groupingStatus === 'success' && (
-                <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-300">
-                    {groupingMessage}
-                </div>
-            )}
-
-            {syncStatus === 'error' && (
-                <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-200">
-                    {syncMessage}
-                </div>
-            )}
-
-            {(groupedIncome.length > 0 || groupedExpenses.length > 0) && (
+            {hasGrouped && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Grouped Income</h3>
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Grouped Income (editable)</h3>
                         <div className="space-y-2">
-                            {groupedIncome.map(item => (
+                            {groupedIncome.map((item, index) => (
                                 <div key={item.category} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
                                     <span className="text-sm text-slate-900 dark:text-white">{item.category}</span>
-                                    <span className="text-sm text-slate-600 dark:text-gray-300">${item.total.toLocaleString()}</span>
+                                    <input
+                                        type="number"
+                                        value={item.total}
+                                        onChange={(event) => handleGroupedIncomeChange(index, event.target.value)}
+                                        className="w-28 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-2 py-1 text-sm text-slate-900 dark:text-white text-right"
+                                    />
                                 </div>
                             ))}
                         </div>
                     </div>
                     <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Grouped Expenses</h3>
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Grouped Expenses (editable)</h3>
                         <div className="space-y-2">
-                            {groupedExpenses.map(item => (
+                            {groupedExpenses.map((item, index) => (
                                 <div key={item.category} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
                                     <span className="text-sm text-slate-900 dark:text-white">{item.category}</span>
-                                    <span className="text-sm text-slate-600 dark:text-gray-300">${item.total.toLocaleString()}</span>
+                                    <input
+                                        type="number"
+                                        value={item.total}
+                                        onChange={(event) => handleGroupedExpenseChange(index, event.target.value)}
+                                        className="w-28 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-2 py-1 text-sm text-slate-900 dark:text-white text-right"
+                                    />
                                 </div>
                             ))}
                         </div>

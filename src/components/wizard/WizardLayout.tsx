@@ -68,6 +68,34 @@ export const WizardLayout = ({
             .join(' ');
     };
 
+    const getPnlItems = (primaryKey: string, fallbackKey?: string) => {
+        if (Array.isArray(formData?.[primaryKey])) return formData[primaryKey];
+        if (fallbackKey && Array.isArray(formData?.[fallbackKey])) return formData[fallbackKey];
+        return [];
+    };
+
+    const sumPnlItems = (items: any[], valueKey: string) =>
+        items.reduce((sum, item) => sum + (parseAmount(item?.[valueKey]) ?? 0), 0);
+
+    const pnlIncomeItems = getPnlItems('pnl_income_items', 'income_items');
+    const pnlExpenseItems = getPnlItems('pnl_expense_items', 'expense_items');
+    const pnlGroupedIncome = getPnlItems('pnl_grouped_income');
+    const pnlGroupedExpenses = getPnlItems('pnl_grouped_expenses');
+
+    const pnlTotals = {
+        income: sumPnlItems(pnlIncomeItems, 'amount'),
+        expenses: sumPnlItems(pnlExpenseItems, 'amount'),
+        groupedIncome: sumPnlItems(pnlGroupedIncome, 'total'),
+        groupedExpenses: sumPnlItems(pnlGroupedExpenses, 'total'),
+    };
+
+    const pnlHasGrouped = pnlGroupedIncome.length > 0 || pnlGroupedExpenses.length > 0;
+    const pnlTotalsMatch =
+        pnlHasGrouped &&
+        Math.abs(pnlTotals.income - pnlTotals.groupedIncome) < 0.01 &&
+        Math.abs(pnlTotals.expenses - pnlTotals.groupedExpenses) < 0.01;
+    const pnlGateBlocked = !pnlTotalsMatch;
+
     // 2. Effects
     React.useEffect(() => {
         setMounted(true);
@@ -240,6 +268,9 @@ export const WizardLayout = ({
     };
 
     const nextStep = async () => {
+        if (currentStep >= 3 && pnlGateBlocked) {
+            return;
+        }
         if (currentStep === 1 && !projectId) {
             await handleStep1Complete(formData);
             return;
@@ -265,8 +296,12 @@ export const WizardLayout = ({
                     {STEPS.map(step => (
                         <button
                             key={step.id}
-                            onClick={() => projectId && setCurrentStep(step.id)} // Only allow nav if project created
-                            disabled={!projectId && step.id > 1}
+                            onClick={() => {
+                                if (projectId && (step.id <= 3 || !pnlGateBlocked)) {
+                                    setCurrentStep(step.id);
+                                }
+                            }} // Only allow nav if project created
+                            disabled={!projectId && step.id > 1 || (pnlGateBlocked && step.id > 3)}
                             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${currentStep === step.id ? 'bg-slate-100 dark:bg-[#283339] border-l-4 border-[#13a4ec] text-slate-900 dark:text-white' : 'text-slate-500 dark:text-gray-400 hover:bg-slate-100/60 dark:hover:bg-white/5'}`}
                         >
                             <span className="material-symbols-outlined">{step.icon}</span>
@@ -307,7 +342,11 @@ export const WizardLayout = ({
                             {currentStep < 5 && (
                                 <Button
                                     onClick={nextStep}
-                                    disabled={currentStep === STEPS.length || (!projectId && currentStep === 1 && !formData.address)}
+                                    disabled={
+                                        currentStep === STEPS.length ||
+                                        (!projectId && currentStep === 1 && !formData.address) ||
+                                        (pnlGateBlocked && currentStep >= 3)
+                                    }
                                 >
                                     {creatingProject ? "Creating..." : "Next"}
                                 </Button>

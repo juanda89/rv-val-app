@@ -17,6 +17,10 @@ export const SHEET_MAPPING = {
     parcelNumber: "C6",
     population_1mile: "C7", // From API
     median_income: "C8",    // From API
+    acreage: "C12",
+    year_built: "C13",
+    property_type: "C14",
+    last_sale_price: "C15",
 
     // --- STEP 2: Rent Roll (Manual Input) ---
     total_lots: "C9",
@@ -25,7 +29,9 @@ export const SHEET_MAPPING = {
 
     // --- STEP 3: P&L (handled in Income & Expenses Categorization sheet) ---
 
-    // --- STEP 4: Taxes (ATTOM API + Manual Override) ---
+    // --- STEP 4: Taxes (RentCast API + Manual Override) ---
+    tax_assessed_value: "C25",
+    tax_year: "C26",
     tax_assessment_rate: "C27",
     tax_millage_rate: "C28",
     tax_prev_year_amount: "C29",

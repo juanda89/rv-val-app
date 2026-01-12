@@ -12,12 +12,15 @@ interface Step4Props {
 
 export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, address }) => {
     const [data, setData] = useState({
+        tax_assessed_value: initialData?.tax_assessed_value || '',
+        tax_year: initialData?.tax_year || '',
         tax_assessment_rate: initialData?.tax_assessment_rate || '',
         tax_millage_rate: initialData?.tax_millage_rate || '',
         tax_prev_year_amount: initialData?.tax_prev_year_amount || '',
     });
 
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         // Sync data changes
@@ -26,38 +29,59 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
 
     useEffect(() => {
         const next = {
+            tax_assessed_value: initialData?.tax_assessed_value || '',
+            tax_year: initialData?.tax_year || '',
             tax_assessment_rate: initialData?.tax_assessment_rate || '',
             tax_millage_rate: initialData?.tax_millage_rate || '',
             tax_prev_year_amount: initialData?.tax_prev_year_amount || '',
         };
         setData((prev) => {
             const hasChanges =
+                next.tax_assessed_value !== prev.tax_assessed_value ||
+                next.tax_year !== prev.tax_year ||
                 next.tax_assessment_rate !== prev.tax_assessment_rate ||
                 next.tax_millage_rate !== prev.tax_millage_rate ||
                 next.tax_prev_year_amount !== prev.tax_prev_year_amount;
             return hasChanges ? next : prev;
         });
-    }, [initialData?.tax_assessment_rate, initialData?.tax_millage_rate, initialData?.tax_prev_year_amount]);
+    }, [
+        initialData?.tax_assessed_value,
+        initialData?.tax_year,
+        initialData?.tax_assessment_rate,
+        initialData?.tax_millage_rate,
+        initialData?.tax_prev_year_amount
+    ]);
 
-    const fetchAttomData = async () => {
+    const fetchRentcastData = async () => {
         if (!address) return;
         setLoading(true);
+        setError(null);
         try {
-            // Mock API call - replace with actual endpoint
-            // const res = await fetch(\`/api/taxes?address=\${encodeURIComponent(address)}\`);
-            // const json = await res.json();
+            const res = await fetch('/api/rentcast/property', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address }),
+            });
+            const json = await res.json();
 
-            // Mock response
-            setTimeout(() => {
-                setData({
-                    tax_assessment_rate: '0.80', // 80%
-                    tax_millage_rate: '0.015', // 1.5%
-                    tax_prev_year_amount: '12000'
-                });
-                setLoading(false);
-            }, 1000);
-        } catch (err) {
+            if (!res.ok) {
+                throw new Error(json?.error || 'RentCast request failed');
+            }
+
+            const taxes = json?.taxes || {};
+
+            setData((prev) => ({
+                ...prev,
+                tax_assessed_value: taxes.assessedValue ?? prev.tax_assessed_value,
+                tax_year: taxes.taxYear ?? prev.tax_year,
+                tax_prev_year_amount: taxes.taxAmount ?? prev.tax_prev_year_amount,
+                tax_millage_rate: taxes.millageRate ?? prev.tax_millage_rate,
+                tax_assessment_rate: taxes.assessmentRatio ?? prev.tax_assessment_rate,
+            }));
+        } catch (err: any) {
             console.error(err);
+            setError(err.message || 'RentCast request failed');
+        } finally {
             setLoading(false);
         }
     };
@@ -74,13 +98,38 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Taxes</h2>
                         <p className="text-sm text-slate-500 dark:text-gray-400">Configure tax assumptions for Year 2.</p>
                     </div>
-                    <Button onClick={fetchAttomData} disabled={loading || !address} variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-500/10">
-                        {loading ? "Fetching..." : "Auto-Fetch from ATTOM"}
+                    <Button onClick={fetchRentcastData} disabled={loading || !address} variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-500/10">
+                        {loading ? "Fetching..." : "Auto-Fetch from RentCast"}
                     </Button>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Assessed Value</label>
+                    <div className="relative">
+                        <span className="absolute left-3 top-2 text-slate-400">$</span>
+                        <Input
+                            type="number"
+                            value={data.tax_assessed_value}
+                            onChange={e => handleChange('tax_assessed_value', e.target.value)}
+                            className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pl-8"
+                            placeholder="0.00"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Tax Year</label>
+                    <Input
+                        type="number"
+                        value={data.tax_year}
+                        onChange={e => handleChange('tax_year', e.target.value)}
+                        className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
+                        placeholder="e.g. 2024"
+                    />
+                </div>
+
                 <div>
                     <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Assessment Ratio</label>
                     <div className="relative">
@@ -122,6 +171,12 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                     </div>
                 </div>
             </div>
+
+            {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                    {error}
+                </div>
+            )}
         </div>
     );
 };

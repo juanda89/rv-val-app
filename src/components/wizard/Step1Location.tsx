@@ -6,6 +6,7 @@ import usePlacesAutocomplete, {
     getLatLng,
 } from "use-places-autocomplete";
 import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 interface Step1Props {
     onDataChange: (data: any) => void;
@@ -61,6 +62,8 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
 
     const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(initialData?.lat ? { lat: initialData.lat, lng: initialData.lng } : null);
     const [projectName, setProjectName] = useState(initialData?.name || '');
+    const [rentcastLoading, setRentcastLoading] = useState(false);
+    const [rentcastError, setRentcastError] = useState<string | null>(null);
     const lastGeocodedAddressRef = React.useRef<string>('');
 
     React.useEffect(() => {
@@ -115,6 +118,49 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
         };
     }, [initialData?.address, initialData?.lat, initialData?.lng, initialData?.city, initialData?.county, onDataChange, ready]);
 
+    const applyRentcastData = (payload: any) => {
+        const general = payload?.general;
+        if (!general) return;
+
+        const updates: Record<string, any> = {};
+        if (!initialData?.parcelNumber && general.parcelNumber) updates.parcelNumber = general.parcelNumber;
+        if (!initialData?.acreage && general.acreage) updates.acreage = general.acreage;
+        if (!initialData?.year_built && general.yearBuilt) updates.year_built = general.yearBuilt;
+        if (!initialData?.property_type && general.propertyType) updates.property_type = general.propertyType;
+        if (!initialData?.last_sale_price && general.lastSalePrice) updates.last_sale_price = general.lastSalePrice;
+        if (!initialData?.county && general.county) updates.county = general.county;
+
+        if (!initialData?.address && general.address) updates.address = general.address;
+        if (!initialData?.city && general.city) updates.city = general.city;
+
+        if (Object.keys(updates).length > 0) {
+            onDataChange(updates);
+        }
+    };
+
+    const fetchRentcastData = async (addressToUse: string) => {
+        if (!addressToUse) return;
+        setRentcastLoading(true);
+        setRentcastError(null);
+        try {
+            const response = await fetch('/api/rentcast/property', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: addressToUse }),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload?.error || 'RentCast request failed');
+            }
+            applyRentcastData(payload);
+        } catch (error: any) {
+            console.error('RentCast fetch failed:', error);
+            setRentcastError(error.message || 'RentCast request failed');
+        } finally {
+            setRentcastLoading(false);
+        }
+    };
+
     const handleSelect = async (address: string) => {
         setValue(address, false);
         clearSuggestions();
@@ -142,6 +188,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
             }
 
             onDataChange(payload);
+            void fetchRentcastData(address);
         } catch (error) {
             console.error("Error: ", error);
         }
@@ -165,7 +212,17 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Property Address</label>
+                <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400">Property Address</label>
+                    <Button
+                        onClick={() => fetchRentcastData(value)}
+                        disabled={rentcastLoading || !value}
+                        variant="outline"
+                        className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
+                    >
+                        {rentcastLoading ? "Fetching..." : "Auto-Fetch from RentCast"}
+                    </Button>
+                </div>
                 <div className="relative">
                     <Input
                         value={value}
@@ -187,6 +244,66 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                             ))}
                         </ul>
                     )}
+                </div>
+            </div>
+
+            {rentcastError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                    {rentcastError}
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Parcel Number</label>
+                    <Input
+                        value={initialData?.parcelNumber || ''}
+                        onChange={(e) => onDataChange({ parcelNumber: e.target.value })}
+                        placeholder="Auto-fetched"
+                        className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Acreage (Acres)</label>
+                    <Input
+                        type="number"
+                        value={initialData?.acreage || ''}
+                        onChange={(e) => onDataChange({ acreage: e.target.value })}
+                        placeholder="Auto-fetched"
+                        className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Year Built</label>
+                    <Input
+                        type="number"
+                        value={initialData?.year_built || ''}
+                        onChange={(e) => onDataChange({ year_built: e.target.value })}
+                        placeholder="Auto-fetched"
+                        className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Property Type</label>
+                    <Input
+                        value={initialData?.property_type || ''}
+                        onChange={(e) => onDataChange({ property_type: e.target.value })}
+                        placeholder="Auto-fetched"
+                        className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Last Sale Price</label>
+                    <div className="relative">
+                        <span className="absolute left-3 top-2 text-slate-400">$</span>
+                        <Input
+                            type="number"
+                            value={initialData?.last_sale_price || ''}
+                            onChange={(e) => onDataChange({ last_sale_price: e.target.value })}
+                            placeholder="Auto-fetched"
+                            className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white pl-8"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -221,6 +338,8 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
     const hasApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder');
     const [manualName, setManualName] = React.useState(initialData?.name || '');
     const [manualAddress, setManualAddress] = React.useState(initialData?.address || '');
+    const [rentcastLoading, setRentcastLoading] = React.useState(false);
+    const [rentcastError, setRentcastError] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         if (typeof initialData?.name === 'string') {
@@ -230,6 +349,37 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
             setManualAddress(initialData.address);
         }
     }, [initialData?.name, initialData?.address]);
+
+    const fetchRentcastData = async () => {
+        if (!manualAddress) return;
+        setRentcastLoading(true);
+        setRentcastError(null);
+        try {
+            const response = await fetch('/api/rentcast/property', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: manualAddress }),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload?.error || 'RentCast request failed');
+            }
+            const general = payload?.general || {};
+            onDataChange({
+                parcelNumber: general.parcelNumber || initialData?.parcelNumber,
+                acreage: general.acreage || initialData?.acreage,
+                year_built: general.yearBuilt || initialData?.year_built,
+                property_type: general.propertyType || initialData?.property_type,
+                last_sale_price: general.lastSalePrice || initialData?.last_sale_price,
+                county: general.county || initialData?.county,
+            });
+        } catch (error: any) {
+            console.error('RentCast fetch failed:', error);
+            setRentcastError(error.message || 'RentCast request failed');
+        } finally {
+            setRentcastLoading(false);
+        }
+    };
 
     if (!hasApiKey) {
         return (
@@ -286,6 +436,74 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         placeholder="Enter address manually..."
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
                     />
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <Button
+                        onClick={fetchRentcastData}
+                        disabled={rentcastLoading || !manualAddress}
+                        variant="outline"
+                        className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
+                    >
+                        {rentcastLoading ? "Fetching..." : "Auto-Fetch from RentCast"}
+                    </Button>
+                    {rentcastError && (
+                        <span className="text-sm text-red-600 dark:text-red-400">{rentcastError}</span>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Parcel Number</label>
+                        <Input
+                            value={initialData?.parcelNumber || ''}
+                            onChange={(e) => onDataChange({ parcelNumber: e.target.value })}
+                            placeholder="Auto-fetched"
+                            className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Acreage (Acres)</label>
+                        <Input
+                            type="number"
+                            value={initialData?.acreage || ''}
+                            onChange={(e) => onDataChange({ acreage: e.target.value })}
+                            placeholder="Auto-fetched"
+                            className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Year Built</label>
+                        <Input
+                            type="number"
+                            value={initialData?.year_built || ''}
+                            onChange={(e) => onDataChange({ year_built: e.target.value })}
+                            placeholder="Auto-fetched"
+                            className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Property Type</label>
+                        <Input
+                            value={initialData?.property_type || ''}
+                            onChange={(e) => onDataChange({ property_type: e.target.value })}
+                            placeholder="Auto-fetched"
+                            className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Last Sale Price</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2 text-slate-400">$</span>
+                            <Input
+                                type="number"
+                                value={initialData?.last_sale_price || ''}
+                                onChange={(e) => onDataChange({ last_sale_price: e.target.value })}
+                                placeholder="Auto-fetched"
+                                className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white pl-8"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
         );
