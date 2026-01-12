@@ -1,9 +1,9 @@
 "use client";
 
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import React from 'react';
 
-const containerVariants = (stagger = 0.1, delay = 0) => ({
+const containerVariants = (stagger = 0.1, delay = 0): Variants => ({
     hidden: {},
     show: {
         transition: {
@@ -13,7 +13,7 @@ const containerVariants = (stagger = 0.1, delay = 0) => ({
     }
 });
 
-const itemVariants = {
+const itemVariants: Variants = {
     hidden: { opacity: 0, y: 20 },
     show: {
         opacity: 1,
