@@ -179,16 +179,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
     const projectAddress = inputs?.address || 'Address pending';
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="flex flex-wrap justify-between items-start gap-4 pb-6 border-b border-[#232f48]">
+        <div className="space-y-8 animate-in fade-in duration-500 text-slate-900 dark:text-white">
+            <div className="flex flex-wrap justify-between items-start gap-4 pb-6 border-b border-slate-200 dark:border-[#232f48]">
                 <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3 flex-wrap">
-                        <h1 className="text-white text-2xl md:text-3xl font-bold tracking-tight">{projectName}</h1>
-                        <span className="bg-green-500/20 text-green-400 text-xs font-bold px-2 py-1 rounded-full border border-green-500/30">
+                        <h1 className="text-slate-900 dark:text-white text-2xl md:text-3xl font-bold tracking-tight">{projectName}</h1>
+                        <span className="bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 text-xs font-bold px-2 py-1 rounded-full border border-green-200 dark:border-green-500/30">
                             ACTIVE LISTING
                         </span>
                     </div>
-                    <div className="flex items-center gap-2 text-[#92a4c9] text-sm">
+                    <div className="flex items-center gap-2 text-slate-500 dark:text-[#92a4c9] text-sm">
                         <span className="material-symbols-outlined text-[18px]">location_on</span>
                         <p>{projectAddress}</p>
                     </div>
@@ -196,7 +196,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                 <div className="flex gap-3">
                     {!isReadOnly && shareUrl && (
                         <button
-                            className="flex items-center justify-center rounded-lg h-10 px-4 bg-[#232f48] hover:bg-[#2d3b55] text-white text-sm font-bold transition-colors"
+                            className="flex items-center justify-center rounded-lg h-10 px-4 bg-white dark:bg-[#232f48] hover:bg-slate-50 dark:hover:bg-[#2d3b55] text-slate-700 dark:text-white text-sm font-bold transition-colors border border-slate-200 dark:border-transparent shadow-sm"
                             onClick={handleShare}
                             type="button"
                         >
@@ -205,7 +205,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                         </button>
                     )}
                     <button
-                        className="flex items-center justify-center rounded-lg h-10 px-4 bg-[#2b6cee] hover:bg-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-900/20 transition-all"
+                        className="flex items-center justify-center rounded-lg h-10 px-4 bg-[#2b6cee] hover:bg-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-500/20 transition-all"
                         type="button"
                         disabled={isReadOnly}
                     >
@@ -216,57 +216,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                <div className="flex items-center gap-4 rounded-xl p-4 bg-[#232f48] border border-white/5 shadow-sm">
-                    <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
+                <div className="flex items-center gap-4 rounded-xl p-4 bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 shadow-sm">
+                    <div className="p-2 bg-blue-50 dark:bg-blue-500/10 rounded-lg text-blue-600 dark:text-blue-400">
                         <span className="material-symbols-outlined">monetization_on</span>
                     </div>
                     <div>
-                        <p className="text-[#92a4c9] text-sm font-medium">Est. Market Value</p>
-                        <p className="text-white text-2xl font-bold tracking-tight">{fmtCurrency(valuation)}</p>
+                        <p className="text-slate-500 dark:text-[#92a4c9] text-sm font-medium">Est. Market Value</p>
+                        <p className="text-slate-900 dark:text-white text-2xl font-bold tracking-tight">{fmtCurrency(valuation)}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-4 rounded-xl p-4 bg-[#232f48] border border-white/5 shadow-sm">
-                    <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400">
+                <div className="flex items-center gap-4 rounded-xl p-4 bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 shadow-sm">
+                    <div className="p-2 bg-purple-50 dark:bg-purple-500/10 rounded-lg text-purple-600 dark:text-purple-400">
                         <span className="material-symbols-outlined">percent</span>
                     </div>
                     <div>
-                        <p className="text-[#92a4c9] text-sm font-medium">Cap Rate</p>
-                        <p className="text-white text-2xl font-bold tracking-tight">{fmtPercent(capRate)}</p>
+                        <p className="text-slate-500 dark:text-[#92a4c9] text-sm font-medium">Cap Rate</p>
+                        <p className="text-slate-900 dark:text-white text-2xl font-bold tracking-tight">{fmtPercent(capRate)}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-4 rounded-xl p-4 bg-[#232f48] border border-white/5 shadow-sm">
-                    <div className="p-2 bg-orange-500/10 rounded-lg text-orange-400">
+                <div className="flex items-center gap-4 rounded-xl p-4 bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 shadow-sm">
+                    <div className="p-2 bg-orange-50 dark:bg-orange-500/10 rounded-lg text-orange-600 dark:text-orange-400">
                         <span className="material-symbols-outlined">trending_up</span>
                     </div>
                     <div>
-                        <p className="text-[#92a4c9] text-sm font-medium">Cash-on-Cash Return</p>
-                        <p className="text-white text-2xl font-bold tracking-tight">{fmtPercent(cashOnCash)}</p>
+                        <p className="text-slate-500 dark:text-[#92a4c9] text-sm font-medium">Cash-on-Cash Return</p>
+                        <p className="text-slate-900 dark:text-white text-2xl font-bold tracking-tight">{fmtPercent(cashOnCash)}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-4 rounded-xl p-4 bg-[#232f48] border border-white/5 shadow-sm">
-                    <div className="p-2 bg-teal-500/10 rounded-lg text-teal-400">
+                <div className="flex items-center gap-4 rounded-xl p-4 bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 shadow-sm">
+                    <div className="p-2 bg-teal-50 dark:bg-teal-500/10 rounded-lg text-teal-600 dark:text-teal-400">
                         <span className="material-symbols-outlined">bed</span>
                     </div>
                     <div>
-                        <p className="text-[#92a4c9] text-sm font-medium">Current Occupancy</p>
-                        <p className="text-white text-2xl font-bold tracking-tight">{fmtPercent(currentOccupancy, 0)}</p>
+                        <p className="text-slate-500 dark:text-[#92a4c9] text-sm font-medium">Current Occupancy</p>
+                        <p className="text-slate-900 dark:text-white text-2xl font-bold tracking-tight">{fmtPercent(currentOccupancy, 0)}</p>
                     </div>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 flex flex-col gap-6">
-                    <section className="rounded-xl bg-[#232f48] border border-white/5 overflow-hidden">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 pb-2 border-b border-white/5 gap-4">
+                    <section className="rounded-xl bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 overflow-hidden shadow-sm">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 pb-2 border-b border-slate-100 dark:border-white/5 gap-4">
                             <div>
-                                <h3 className="text-lg font-bold text-white">Financial Projections</h3>
-                                <p className="text-sm text-[#92a4c9] mt-1">5-year forecast based on current inputs</p>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Financial Projections</h3>
+                                <p className="text-sm text-slate-500 dark:text-[#92a4c9] mt-1">5-year forecast based on current inputs</p>
                             </div>
-                            <div className="flex h-9 bg-[#111722] rounded-lg p-1">
+                            <div className="flex h-9 bg-slate-100 dark:bg-[#111722] rounded-lg p-1">
                                 {(['conservative', 'base', 'optimistic'] as Scenario[]).map((item) => (
                                     <button
                                         key={item}
-                                        className={`flex-1 px-3 text-xs font-medium rounded-md transition-colors ${scenario === item ? 'bg-[#232f48] text-white shadow-sm border border-white/5' : 'text-[#92a4c9] hover:text-white'}`}
+                                        className={`flex-1 px-3 text-xs font-medium rounded-md transition-colors ${scenario === item ? 'bg-white dark:bg-[#232f48] text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/5' : 'text-slate-500 dark:text-[#92a4c9] hover:text-slate-900 dark:hover:text-white'}`}
                                         onClick={() => setScenario(item)}
                                         type="button"
                                     >
@@ -276,10 +276,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                             </div>
                         </div>
                         <div className="p-6">
-                            <div className="relative h-64 w-full mt-4 flex items-end justify-between gap-2 sm:gap-4 text-xs text-[#92a4c9]">
+                            <div className="relative h-64 w-full mt-4 flex items-end justify-between gap-2 sm:gap-4 text-xs text-slate-500 dark:text-[#92a4c9]">
                                 <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
                                     {Array.from({ length: 5 }).map((_, idx) => (
-                                        <div key={idx} className="border-t border-white/5 w-full h-0"></div>
+                                        <div key={idx} className="border-t border-slate-100 dark:border-white/5 w-full h-0"></div>
                                     ))}
                                 </div>
                                 {projectionRows.map((row) => {
@@ -302,23 +302,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                             <div className="flex justify-center gap-6 mt-6">
                                 <div className="flex items-center gap-2">
                                     <div className="size-3 rounded-full bg-[#2b6cee]"></div>
-                                    <span className="text-xs text-[#92a4c9]">Gross Revenue</span>
+                                    <span className="text-xs text-slate-500 dark:text-[#92a4c9]">Gross Revenue</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <div className="size-3 rounded-full bg-teal-500"></div>
-                                    <span className="text-xs text-[#92a4c9]">Net Operating Income (NOI)</span>
+                                    <span className="text-xs text-slate-500 dark:text-[#92a4c9]">Net Operating Income (NOI)</span>
                                 </div>
                             </div>
                         </div>
                     </section>
 
-                    <section className="rounded-xl bg-[#232f48] border border-white/5 overflow-hidden">
-                        <div className="p-6 pb-4 border-b border-white/5">
-                            <h3 className="text-lg font-bold text-white">Detailed Breakdown</h3>
+                    <section className="rounded-xl bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 overflow-hidden shadow-sm">
+                        <div className="p-6 pb-4 border-b border-slate-100 dark:border-white/5">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Detailed Breakdown</h3>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm whitespace-nowrap">
-                                <thead className="bg-[#111722] text-[#92a4c9] uppercase text-xs font-semibold">
+                                <thead className="bg-slate-50 dark:bg-[#111722] text-slate-500 dark:text-[#92a4c9] uppercase text-xs font-semibold">
                                     <tr>
                                         <th className="px-6 py-4">Fiscal Year</th>
                                         <th className="px-6 py-4">Gross Revenue</th>
@@ -327,18 +327,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                                         <th className="px-6 py-4">NOI Margin</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-white/5 text-gray-300">
+                                <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-600 dark:text-gray-300">
                                     {projectionRows.length === 0 && (
                                         <tr>
-                                            <td className="px-6 py-4 text-[#92a4c9]" colSpan={5}>Projections will appear once NOI is available.</td>
+                                            <td className="px-6 py-4 text-slate-500 dark:text-[#92a4c9]" colSpan={5}>Projections will appear once NOI is available.</td>
                                         </tr>
                                     )}
                                     {projectionRows.map((row) => (
-                                        <tr key={row.year} className="hover:bg-white/5 transition-colors">
-                                            <td className="px-6 py-4 font-medium text-white">{2023 + row.year} (Y{row.year})</td>
+                                        <tr key={row.year} className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                            <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{2023 + row.year} (Y{row.year})</td>
                                             <td className="px-6 py-4">{fmtCurrency(row.revenue)}</td>
-                                            <td className="px-6 py-4 text-red-400">({fmtCurrency(row.expenses)})</td>
-                                            <td className="px-6 py-4 text-green-400 font-bold">{fmtCurrency(row.noi)}</td>
+                                            <td className="px-6 py-4 text-red-600 dark:text-red-400">({fmtCurrency(row.expenses)})</td>
+                                            <td className="px-6 py-4 text-green-600 dark:text-green-400 font-bold">{fmtCurrency(row.noi)}</td>
                                             <td className="px-6 py-4">{fmtPercent(row.margin)}</td>
                                         </tr>
                                     ))}
@@ -349,19 +349,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                 </div>
 
                 <div className="flex flex-col gap-6">
-                    <section className="rounded-xl bg-[#232f48] border border-white/5 p-6 flex flex-col gap-5">
+                    <section className="rounded-xl bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 p-6 flex flex-col gap-5 shadow-sm">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-white">Valuation Drivers</h3>
-                            <span className="material-symbols-outlined text-[#92a4c9]" title="Adjust these inputs to recalculate valuation">info</span>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Valuation Drivers</h3>
+                            <span className="material-symbols-outlined text-slate-500 dark:text-[#92a4c9]" title="Adjust these inputs to recalculate valuation">info</span>
                         </div>
                         <div className="flex flex-col gap-4">
                             <div className="flex flex-col gap-2">
                                 <div className="flex justify-between text-sm">
-                                    <span className="text-[#92a4c9]">Annual Rent Growth</span>
-                                    <span className="text-white font-bold">{fmtPercent(driverValues.annualRentGrowth)}</span>
+                                    <span className="text-slate-500 dark:text-[#92a4c9]">Annual Rent Growth</span>
+                                    <span className="text-slate-900 dark:text-white font-bold">{fmtPercent(driverValues.annualRentGrowth)}</span>
                                 </div>
                                 <input
-                                    className="w-full h-2 bg-[#111722] rounded-lg appearance-none cursor-pointer accent-[#2b6cee]"
+                                    className="w-full h-2 bg-slate-100 dark:bg-[#111722] rounded-lg appearance-none cursor-pointer accent-[#2b6cee]"
                                     max="0.12"
                                     min="0"
                                     step="0.0025"
@@ -373,11 +373,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                             </div>
                             <div className="flex flex-col gap-2">
                                 <div className="flex justify-between text-sm">
-                                    <span className="text-[#92a4c9]">Expense Inflation</span>
-                                    <span className="text-white font-bold">{fmtPercent(driverValues.expenseInflation)}</span>
+                                    <span className="text-slate-500 dark:text-[#92a4c9]">Expense Inflation</span>
+                                    <span className="text-slate-900 dark:text-white font-bold">{fmtPercent(driverValues.expenseInflation)}</span>
                                 </div>
                                 <input
-                                    className="w-full h-2 bg-[#111722] rounded-lg appearance-none cursor-pointer accent-[#2b6cee]"
+                                    className="w-full h-2 bg-slate-100 dark:bg-[#111722] rounded-lg appearance-none cursor-pointer accent-[#2b6cee]"
                                     max="0.1"
                                     min="0"
                                     step="0.0025"
@@ -389,11 +389,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                             </div>
                             <div className="flex flex-col gap-2">
                                 <div className="flex justify-between text-sm">
-                                    <span className="text-[#92a4c9]">Exit Cap Rate</span>
-                                    <span className="text-white font-bold">{fmtPercent(driverValues.exitCapRate)}</span>
+                                    <span className="text-slate-500 dark:text-[#92a4c9]">Exit Cap Rate</span>
+                                    <span className="text-slate-900 dark:text-white font-bold">{fmtPercent(driverValues.exitCapRate)}</span>
                                 </div>
                                 <input
-                                    className="w-full h-2 bg-[#111722] rounded-lg appearance-none cursor-pointer accent-[#2b6cee]"
+                                    className="w-full h-2 bg-slate-100 dark:bg-[#111722] rounded-lg appearance-none cursor-pointer accent-[#2b6cee]"
                                     max="0.12"
                                     min="0.04"
                                     step="0.0025"
@@ -405,11 +405,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                             </div>
                             <div className="flex flex-col gap-2">
                                 <div className="flex justify-between text-sm">
-                                    <span className="text-[#92a4c9]">Occupancy Target</span>
-                                    <span className="text-white font-bold">{fmtPercent(driverValues.occupancyTarget, 0)}</span>
+                                    <span className="text-slate-500 dark:text-[#92a4c9]">Occupancy Target</span>
+                                    <span className="text-slate-900 dark:text-white font-bold">{fmtPercent(driverValues.occupancyTarget, 0)}</span>
                                 </div>
                                 <input
-                                    className="w-full h-2 bg-[#111722] rounded-lg appearance-none cursor-pointer accent-[#2b6cee]"
+                                    className="w-full h-2 bg-slate-100 dark:bg-[#111722] rounded-lg appearance-none cursor-pointer accent-[#2b6cee]"
                                     max="1"
                                     min="0.6"
                                     step="0.01"
@@ -422,7 +422,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                         </div>
                         <div className="pt-2">
                             <button
-                                className="w-full rounded-lg bg-white/5 hover:bg-white/10 text-white font-bold py-3 text-sm transition-colors border border-white/10 flex items-center justify-center gap-2"
+                                className="w-full rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-white font-bold py-3 text-sm transition-colors border border-slate-200 dark:border-white/10 flex items-center justify-center gap-2"
                                 type="button"
                                 onClick={handleRecalculate}
                                 disabled={isReadOnly}
@@ -433,25 +433,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
                         </div>
                     </section>
 
-                    <section className="rounded-xl bg-[#232f48] border border-white/5 overflow-hidden flex flex-col">
-                        <div className="p-4 border-b border-white/5 flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[#92a4c9] text-[18px]">location_on</span>
-                            <h3 className="text-base font-bold text-white">Location</h3>
+                    <section className="rounded-xl bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 overflow-hidden flex flex-col shadow-sm">
+                        <div className="p-4 border-b border-slate-100 dark:border-white/5 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-slate-500 dark:text-[#92a4c9] text-[18px]">location_on</span>
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white">Location</h3>
                         </div>
-                        <div className="relative h-56 w-full bg-neutral-800">
+                        <div className="relative h-56 w-full bg-slate-100 dark:bg-neutral-800">
                             {mapUrl ? (
                                 <img src={mapUrl} alt="Property map" className="absolute inset-0 w-full h-full object-cover opacity-70" />
                             ) : (
-                                <div className="absolute inset-0 flex items-center justify-center text-xs text-[#92a4c9]">
+                                <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 dark:text-[#92a4c9]">
                                     Map preview will appear once address is set.
                                 </div>
                             )}
-                            <div className="absolute bottom-3 right-3 bg-white text-[#101622] text-[10px] px-3 py-1 rounded-full font-bold">
+                            <div className="absolute bottom-3 right-3 bg-white dark:bg-[#101622] text-slate-900 dark:text-white text-[10px] px-3 py-1 rounded-full font-bold border border-slate-200 dark:border-transparent">
                                 RV Park
                             </div>
                         </div>
                         <div className="p-4">
-                            <p className="text-sm text-[#92a4c9]">{projectAddress}</p>
+                            <p className="text-sm text-slate-500 dark:text-[#92a4c9]">{projectAddress}</p>
                         </div>
                     </section>
                 </div>

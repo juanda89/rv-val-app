@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ValuationUploadPanel } from '@/components/wizard/ValuationUploadPanel';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { BarChart3 } from 'lucide-react';
 import { PNL_LABELS } from '@/config/pnlMapping';
 
@@ -252,12 +253,12 @@ export const WizardLayout = ({
     }
 
     return (
-        <div className="flex min-h-screen bg-[#111618] text-white">
+        <div className="flex min-h-screen bg-slate-50 dark:bg-[#111618] text-slate-900 dark:text-white transition-colors duration-200">
             {/* Sidebar */}
-            <div className="w-64 border-r border-[#283339] hidden md:flex flex-col p-6 sticky top-0 h-screen">
+            <div className="w-64 border-r border-slate-200 dark:border-[#283339] hidden md:flex flex-col p-6 sticky top-0 h-screen bg-white dark:bg-[#111618]">
                 <Link href="/valuations" className="flex items-center gap-2 mb-8 hover:opacity-90">
-                    <BarChart3 className="w-6 h-6 text-blue-500" />
-                    <h1 className="font-bold text-xl">RV Valuations</h1>
+                    <BarChart3 className="w-6 h-6 text-[#13a4ec]" />
+                    <h1 className="font-bold text-xl text-slate-900 dark:text-white">RV Valuations</h1>
                 </Link>
 
                 <nav className="space-y-2">
@@ -266,7 +267,7 @@ export const WizardLayout = ({
                             key={step.id}
                             onClick={() => projectId && setCurrentStep(step.id)} // Only allow nav if project created
                             disabled={!projectId && step.id > 1}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${currentStep === step.id ? 'bg-[#283339] border-l-4 border-blue-500 text-white' : 'text-gray-400 hover:bg-white/5'}`}
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${currentStep === step.id ? 'bg-slate-100 dark:bg-[#283339] border-l-4 border-[#13a4ec] text-slate-900 dark:text-white' : 'text-slate-500 dark:text-gray-400 hover:bg-slate-100/60 dark:hover:bg-white/5'}`}
                         >
                             <span className="material-symbols-outlined">{step.icon}</span>
                             <span className="text-sm font-medium">{step.title}</span>
@@ -274,10 +275,10 @@ export const WizardLayout = ({
                     ))}
                 </nav>
 
-                <div className="mt-auto pt-6 border-t border-[#283339]">
+                <div className="mt-auto pt-6 border-t border-slate-200 dark:border-[#283339]">
                     {projectId && (
-                        <div className="text-xs text-gray-500">
-                            Project ID: <span className="font-mono text-gray-400">{projectId.slice(0, 8)}...</span>
+                        <div className="text-xs text-slate-500 dark:text-gray-500">
+                            Project ID: <span className="font-mono text-slate-400">{projectId.slice(0, 8)}...</span>
                             <div className="mt-2 flex items-center gap-2">
                                 <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`}></span>
                                 {isSyncing ? 'Syncing...' : 'Synced'}
@@ -292,15 +293,16 @@ export const WizardLayout = ({
 
                 {/* Main Content */}
                 <div className="flex-1 flex flex-col">
-                    <header className="h-16 border-b border-[#283339] flex items-center justify-between px-8 bg-[#111618]/95 backdrop-blur sticky top-0 z-10">
-                        <h2 className="text-lg font-semibold">{STEPS[currentStep - 1].title}</h2>
-                        <div className="flex gap-4">
+                    <header className="h-16 border-b border-slate-200 dark:border-[#283339] flex items-center justify-between px-8 bg-white/90 dark:bg-[#111618]/95 backdrop-blur sticky top-0 z-10">
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{STEPS[currentStep - 1].title}</h2>
+                        <div className="flex items-center gap-4">
+                            <ThemeToggle className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors" />
                             {currentStep === 1 && !projectId ? (
-                                <Button variant="ghost" className="text-gray-400" onClick={() => router.push('/valuations')}>
+                                <Button variant="ghost" className="text-slate-500 dark:text-gray-400" onClick={() => router.push('/valuations')}>
                                     Cancel
                                 </Button>
                             ) : (
-                                <Button variant="ghost" className="text-gray-400" onClick={prevStep} disabled={currentStep === 1}>Back</Button>
+                                <Button variant="ghost" className="text-slate-500 dark:text-gray-400" onClick={prevStep} disabled={currentStep === 1}>Back</Button>
                             )}
                             {currentStep < 5 && (
                                 <Button

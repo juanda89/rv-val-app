@@ -71,21 +71,21 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
     };
 
     return (
-        <aside className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-[#283339] bg-[#0f1418] text-white px-6 py-6 h-full">
+        <aside className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-[#283339] bg-slate-100 dark:bg-[#0f1418] text-slate-900 dark:text-white px-6 py-6 h-full transition-colors duration-200">
             <div className="sticky top-6 space-y-6">
                 <div>
                     <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-blue-400">upload_file</span>
+                        <span className="material-symbols-outlined text-[#13a4ec]">upload_file</span>
                         <h3 className="text-lg font-semibold">Upload Documents</h3>
                     </div>
-                    <p className="text-xs text-gray-400 mt-2">
+                    <p className="text-xs text-slate-500 dark:text-gray-400 mt-2">
                         Drag & drop or upload supporting files. AI will extract data to auto-fill your valuation.
                     </p>
                 </div>
 
                 <div
                     className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
-                        isDragging ? 'border-blue-400 bg-blue-500/10' : 'border-[#283339] bg-[#141b21]'
+                        isDragging ? 'border-[#13a4ec] bg-[#13a4ec]/10' : 'border-slate-300 dark:border-[#283339] bg-white dark:bg-[#141b21]'
                     } ${status === 'loading' ? 'opacity-60 pointer-events-none' : ''}`}
                     onDragOver={(event) => {
                         event.preventDefault();
@@ -103,14 +103,14 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
                         onChange={(event) => handleFileSelect(event.target.files?.[0])}
                     />
                     <div className="flex flex-col items-center gap-2">
-                        <span className="material-symbols-outlined text-3xl text-blue-400">cloud_upload</span>
+                        <span className="material-symbols-outlined text-3xl text-[#13a4ec]">cloud_upload</span>
                         <p className="text-sm font-semibold">
                             {fileName ? fileName : 'Drop files here'}
                         </p>
-                        <p className="text-xs text-gray-400">CSV, XLS/XLSX, PDF</p>
+                        <p className="text-xs text-slate-500 dark:text-gray-400">CSV, XLS/XLSX, PDF</p>
                         <button
                             onClick={() => inputRef.current?.click()}
-                            className="mt-3 px-4 py-2 rounded-lg text-xs font-semibold bg-blue-500 hover:bg-blue-400 transition-colors"
+                            className="mt-3 px-4 py-2 rounded-lg text-xs font-semibold bg-[#13a4ec] hover:bg-sky-500 text-white transition-colors"
                             disabled={status === 'loading'}
                             type="button"
                         >
@@ -120,7 +120,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
                 </div>
 
                 {status === 'loading' && (
-                    <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 text-xs text-blue-200 space-y-2">
+                    <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4 text-xs text-sky-700 dark:text-sky-200 space-y-2">
                         <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
                             <span>Uploading file...</span>
@@ -131,18 +131,18 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
                 )}
 
                 {status === 'success' && (
-                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-200">
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-700 dark:text-emerald-200">
                         {message}
                     </div>
                 )}
 
                 {status === 'error' && (
-                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-200">
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-700 dark:text-red-200">
                         {message}
                     </div>
                 )}
 
-                <div className="text-[11px] text-gray-500 space-y-2">
+                <div className="text-[11px] text-slate-500 dark:text-gray-500 space-y-2">
                     <div className="flex items-start gap-2">
                         <span className="material-symbols-outlined text-sm">verified</span>
                         <span>Only empty fields will be auto-completed.</span>
@@ -157,7 +157,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
                     </div>
                 </div>
 
-                <div className="text-[11px] text-gray-500">
+                <div className="text-[11px] text-slate-500 dark:text-gray-500">
                     Supported formats: {SUPPORTED_EXTENSIONS.join(', ').toUpperCase()}
                 </div>
             </div>

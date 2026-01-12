@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import {
   BarChart3,
   DollarSign,
@@ -221,19 +222,19 @@ export default function DashboardPage() {
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen bg-[#101c22] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-[#101c22] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-10 h-10 text-[#13a4ec] animate-spin" />
-          <p className="text-slate-400">Loading Dashboard...</p>
+          <p className="text-slate-500 dark:text-slate-400">Loading Dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#f6f7f8] dark:bg-[#101c22] text-slate-900 dark:text-white font-sans min-h-screen flex flex-col overflow-x-hidden">
+    <div className="bg-slate-50 dark:bg-[#101c22] text-slate-900 dark:text-white font-sans min-h-screen flex flex-col overflow-x-hidden transition-colors duration-200">
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-[#e5e7eb] dark:border-[#283339] bg-white dark:bg-[#101c22] px-6 py-3 lg:px-10">
+      <header className="sticky top-0 z-50 flex items-center justify-between whitespace-nowrap border-b border-solid border-[#e5e7eb] dark:border-[#283339] bg-white/80 dark:bg-[#101c22] px-6 py-3 lg:px-10 backdrop-blur">
         <Link href="/valuations" className="flex items-center gap-4 text-slate-900 dark:text-white hover:opacity-90">
           <div className="size-8 flex items-center justify-center bg-[#13a4ec]/20 rounded-lg text-[#13a4ec]">
             <BarChart3 className="w-5 h-5 text-[#13a4ec]" />
@@ -246,6 +247,7 @@ export default function DashboardPage() {
             <Link className="text-[#13a4ec] text-sm font-medium leading-normal" href="/valuations">Valuations</Link>
           </nav>
           <div className="flex items-center gap-3 pl-4 border-l border-[#e5e7eb] dark:border-[#283339]">
+            <ThemeToggle className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors" />
             <div className="flex flex-col items-end hidden lg:flex">
               <span className="text-xs font-semibold">{user.email?.split('@')[0]}</span>
               <span className="text-[10px] text-slate-500">Analyst</span>
@@ -255,7 +257,8 @@ export default function DashboardPage() {
           </div>
         </div>
         {/* Mobile Menu Icon */}
-        <div className="flex md:hidden">
+        <div className="flex md:hidden items-center gap-2">
+          <ThemeToggle className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors" />
           <button className="p-2 text-slate-900 dark:text-white">
             <span className="material-symbols-outlined">menu</span>
           </button>

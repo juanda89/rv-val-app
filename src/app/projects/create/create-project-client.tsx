@@ -67,8 +67,8 @@ export const CreateProjectClient = () => {
 
     if (loading || projectLoading) {
         return (
-            <div className="min-h-screen bg-[#111618] flex items-center justify-center">
-                <div className="text-white">Loading...</div>
+            <div className="min-h-screen bg-slate-50 dark:bg-[#111618] flex items-center justify-center">
+                <div className="text-slate-600 dark:text-white">Loading...</div>
             </div>
         );
     }
@@ -76,8 +76,8 @@ export const CreateProjectClient = () => {
     if (!user) return null;
     if (projectError) {
         return (
-            <div className="min-h-screen bg-[#111618] flex items-center justify-center">
-                <div className="text-white flex flex-col gap-4 items-center">
+            <div className="min-h-screen bg-slate-50 dark:bg-[#111618] flex items-center justify-center">
+                <div className="text-slate-700 dark:text-white flex flex-col gap-4 items-center">
                     <p>{projectError}</p>
                     <button
                         className="px-4 py-2 rounded bg-[#13a4ec] text-white"

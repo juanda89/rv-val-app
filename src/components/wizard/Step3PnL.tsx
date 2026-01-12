@@ -236,43 +236,43 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
     return (
         <div className="space-y-8">
             <div className="flex flex-col gap-3">
-                <h2 className="text-xl font-bold text-white">Income & Expenses</h2>
-                <p className="text-sm text-gray-400">
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Income & Expenses</h2>
+                <p className="text-sm text-slate-500 dark:text-gray-400">
                     Add income and expense line items manually, or review items imported from your document upload.
                 </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-white">Original Income</h3>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Original Income</h3>
                     <div className="flex gap-2">
                         <input
                             value={incomeName}
                             onChange={(event) => setIncomeName(event.target.value)}
                             placeholder="Income name"
-                            className="flex-1 rounded-md bg-[#283339] border border-transparent px-3 py-2 text-sm text-white"
+                            className="flex-1 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-3 py-2 text-sm text-slate-900 dark:text-white"
                         />
                         <input
                             value={incomeAmount}
                             onChange={(event) => setIncomeAmount(event.target.value)}
                             placeholder="Amount"
                             type="number"
-                            className="w-28 rounded-md bg-[#283339] border border-transparent px-3 py-2 text-sm text-white"
+                            className="w-28 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-3 py-2 text-sm text-slate-900 dark:text-white"
                         />
                         <Button onClick={handleAddIncome}>Add</Button>
                     </div>
                     <div className="space-y-2">
                         {incomeItems.length === 0 && (
-                            <p className="text-xs text-gray-500">No income items yet.</p>
+                            <p className="text-xs text-slate-500 dark:text-gray-500">No income items yet.</p>
                         )}
                         {incomeItems.map(item => (
-                            <div key={item.id} className="flex items-center justify-between rounded-lg bg-[#1a2228] px-3 py-2">
+                            <div key={item.id} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
                                 <div>
-                                    <p className="text-sm text-white">{item.name}</p>
-                                    <p className="text-xs text-gray-400">${item.amount.toLocaleString()}</p>
+                                    <p className="text-sm text-slate-900 dark:text-white">{item.name}</p>
+                                    <p className="text-xs text-slate-500 dark:text-gray-400">${item.amount.toLocaleString()}</p>
                                 </div>
                                 <button
-                                    className="text-xs text-red-400 hover:text-red-300"
+                                    className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
                                     onClick={() => handleRemoveIncome(item.id)}
                                 >
                                     Remove
@@ -283,35 +283,35 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                 </div>
 
                 <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-white">Original Expenses</h3>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Original Expenses</h3>
                     <div className="flex gap-2">
                         <input
                             value={expenseName}
                             onChange={(event) => setExpenseName(event.target.value)}
                             placeholder="Expense name"
-                            className="flex-1 rounded-md bg-[#283339] border border-transparent px-3 py-2 text-sm text-white"
+                            className="flex-1 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-3 py-2 text-sm text-slate-900 dark:text-white"
                         />
                         <input
                             value={expenseAmount}
                             onChange={(event) => setExpenseAmount(event.target.value)}
                             placeholder="Amount"
                             type="number"
-                            className="w-28 rounded-md bg-[#283339] border border-transparent px-3 py-2 text-sm text-white"
+                            className="w-28 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-3 py-2 text-sm text-slate-900 dark:text-white"
                         />
                         <Button onClick={handleAddExpense}>Add</Button>
                     </div>
                     <div className="space-y-2">
                         {expenseItems.length === 0 && (
-                            <p className="text-xs text-gray-500">No expense items yet.</p>
+                            <p className="text-xs text-slate-500 dark:text-gray-500">No expense items yet.</p>
                         )}
                         {expenseItems.map(item => (
-                            <div key={item.id} className="flex items-center justify-between rounded-lg bg-[#1a2228] px-3 py-2">
+                            <div key={item.id} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
                                 <div>
-                                    <p className="text-sm text-white">{item.name}</p>
-                                    <p className="text-xs text-gray-400">${item.amount.toLocaleString()}</p>
+                                    <p className="text-sm text-slate-900 dark:text-white">{item.name}</p>
+                                    <p className="text-xs text-slate-500 dark:text-gray-400">${item.amount.toLocaleString()}</p>
                                 </div>
                                 <button
-                                    className="text-xs text-red-400 hover:text-red-300"
+                                    className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
                                     onClick={() => handleRemoveExpense(item.id)}
                                 >
                                     Remove
@@ -322,10 +322,10 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                 </div>
             </div>
 
-            <div className="rounded-xl border border-[#283339] bg-[#141b21] p-4 flex items-center justify-between">
+            <div className="rounded-xl border border-slate-200 dark:border-[#283339] bg-white dark:bg-[#141b21] p-4 flex items-center justify-between">
                 <div>
-                    <p className="text-xs text-gray-400">Original Totals</p>
-                    <p className="text-sm text-white">Income: ${totals.income.toLocaleString()} · Expenses: ${totals.expenses.toLocaleString()}</p>
+                    <p className="text-xs text-slate-500 dark:text-gray-400">Original Totals</p>
+                    <p className="text-sm text-slate-900 dark:text-white">Income: ${totals.income.toLocaleString()} · Expenses: ${totals.expenses.toLocaleString()}</p>
                 </div>
                 <Button
                     onClick={handleGroupWithAi}
@@ -336,26 +336,26 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
             </div>
 
             {(groupedIncome.length > 0 || groupedExpenses.length > 0) && (
-                <div className="rounded-xl border border-[#283339] bg-[#141b21] p-4 space-y-3">
+                <div className="rounded-xl border border-slate-200 dark:border-[#283339] bg-white dark:bg-[#141b21] p-4 space-y-3">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs text-gray-400">Income Totals</p>
-                            <p className="text-sm text-white">
+                            <p className="text-xs text-slate-500 dark:text-gray-400">Income Totals</p>
+                            <p className="text-sm text-slate-900 dark:text-white">
                                 Original: ${totals.income.toLocaleString()} · Grouped: ${groupedTotals.income.toLocaleString()}
                             </p>
                         </div>
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${totalsMatch.income ? 'bg-emerald-500/15 text-emerald-300' : 'bg-yellow-500/15 text-yellow-200'}`}>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${totalsMatch.income ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200'}`}>
                             {totalsMatch.income ? 'Matched' : 'Mismatch'}
                         </span>
                     </div>
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs text-gray-400">Expense Totals</p>
-                            <p className="text-sm text-white">
+                            <p className="text-xs text-slate-500 dark:text-gray-400">Expense Totals</p>
+                            <p className="text-sm text-slate-900 dark:text-white">
                                 Original: ${totals.expenses.toLocaleString()} · Grouped: ${groupedTotals.expenses.toLocaleString()}
                             </p>
                         </div>
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${totalsMatch.expenses ? 'bg-emerald-500/15 text-emerald-300' : 'bg-yellow-500/15 text-yellow-200'}`}>
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${totalsMatch.expenses ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200'}`}>
                             {totalsMatch.expenses ? 'Matched' : 'Mismatch'}
                         </span>
                     </div>
@@ -363,19 +363,19 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
             )}
 
             {groupingStatus === 'error' && (
-                <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-300">
                     {groupingMessage}
                 </div>
             )}
 
             {groupingStatus === 'success' && (
-                <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+                <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-300">
                     {groupingMessage}
                 </div>
             )}
 
             {syncStatus === 'error' && (
-                <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-200">
+                <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-200">
                     {syncMessage}
                 </div>
             )}
@@ -383,23 +383,23 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
             {(groupedIncome.length > 0 || groupedExpenses.length > 0) && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-white">Grouped Income</h3>
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Grouped Income</h3>
                         <div className="space-y-2">
                             {groupedIncome.map(item => (
-                                <div key={item.category} className="flex items-center justify-between rounded-lg bg-[#1a2228] px-3 py-2">
-                                    <span className="text-sm text-white">{item.category}</span>
-                                    <span className="text-sm text-gray-300">${item.total.toLocaleString()}</span>
+                                <div key={item.category} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
+                                    <span className="text-sm text-slate-900 dark:text-white">{item.category}</span>
+                                    <span className="text-sm text-slate-600 dark:text-gray-300">${item.total.toLocaleString()}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
                     <div className="space-y-3">
-                        <h3 className="text-sm font-semibold text-white">Grouped Expenses</h3>
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Grouped Expenses</h3>
                         <div className="space-y-2">
                             {groupedExpenses.map(item => (
-                                <div key={item.category} className="flex items-center justify-between rounded-lg bg-[#1a2228] px-3 py-2">
-                                    <span className="text-sm text-white">{item.category}</span>
-                                    <span className="text-sm text-gray-300">${item.total.toLocaleString()}</span>
+                                <div key={item.category} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
+                                    <span className="text-sm text-slate-900 dark:text-white">{item.category}</span>
+                                    <span className="text-sm text-slate-600 dark:text-gray-300">${item.total.toLocaleString()}</span>
                                 </div>
                             ))}
                         </div>

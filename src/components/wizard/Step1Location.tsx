@@ -150,37 +150,37 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-3">
-                <h2 className="text-xl font-bold text-white">Location & Details</h2>
-                <p className="text-sm text-gray-400">Enter project name and search for the RV park location.</p>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">Location & Details</h2>
+                <p className="text-sm text-slate-500 dark:text-gray-400">Enter project name and search for the RV park location.</p>
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">Project Name</label>
+                <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Project Name</label>
                 <Input
                     value={projectName}
                     onChange={(e) => setProjectName(e.target.value)}
                     placeholder="e.g., Sunset RV Park"
-                    className="w-full bg-[#283339] border-transparent text-white focus:ring-blue-500"
+                    className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white focus:ring-blue-500"
                 />
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">Property Address</label>
+                <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Property Address</label>
                 <div className="relative">
                     <Input
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
                         disabled={!ready}
                         placeholder="Search address..."
-                        className="w-full bg-[#283339] border-transparent text-white focus:ring-blue-500"
+                        className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white focus:ring-blue-500"
                     />
                     {status === "OK" && (
-                        <ul className="absolute z-10 w-full bg-[#1a2228] border border-[#283339] rounded-md mt-1 max-h-60 overflow-auto shadow-lg">
+                        <ul className="absolute z-10 w-full bg-white dark:bg-[#1a2228] border border-slate-200 dark:border-[#283339] rounded-md mt-1 max-h-60 overflow-auto shadow-lg">
                             {data.map(({ place_id, description }) => (
                                 <li
                                     key={place_id}
                                     onClick={() => handleSelect(description)}
-                                    className="cursor-pointer px-4 py-2 hover:bg-[#283339] text-white text-sm"
+                                    className="cursor-pointer px-4 py-2 hover:bg-slate-100 dark:hover:bg-[#283339] text-slate-900 dark:text-white text-sm"
                                 >
                                     {description}
                                 </li>
@@ -191,7 +191,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
             </div>
 
             {/* Map Preview */}
-            <div className="rounded-xl overflow-hidden h-64 bg-[#0e1214] border border-[#283339] relative flex items-center justify-center">
+            <div className="rounded-xl overflow-hidden h-64 bg-slate-100 dark:bg-[#0e1214] border border-slate-200 dark:border-[#283339] relative flex items-center justify-center">
                 {coordinates ? (
                     <img
                         src={`https://maps.googleapis.com/maps/api/staticmap?center=${coordinates.lat},${coordinates.lng}&zoom=17&size=600x300&maptype=satellite&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}`}
@@ -199,18 +199,18 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         className="w-full h-full object-cover"
                     />
                 ) : (
-                    <div className="text-gray-500 text-sm">Enter address to see map</div>
+                    <div className="text-slate-500 dark:text-gray-500 text-sm">Enter address to see map</div>
                 )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Population (1 mi)</label>
-                    <Input disabled value={initialData?.population_1mile || ""} placeholder="Auto-fetched" className="bg-[#1a2228]" />
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Population (1 mi)</label>
+                    <Input disabled value={initialData?.population_1mile || ""} placeholder="Auto-fetched" className="bg-slate-100 dark:bg-[#1a2228]" />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Median Income</label>
-                    <Input disabled value={initialData?.median_income || ""} placeholder="Auto-fetched" className="bg-[#1a2228]" />
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Median Income</label>
+                    <Input disabled value={initialData?.median_income || ""} placeholder="Auto-fetched" className="bg-slate-100 dark:bg-[#1a2228]" />
                 </div>
             </div>
         </div>
@@ -235,20 +235,20 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
         return (
             <div className="space-y-6">
                 <div className="flex flex-col gap-3">
-                    <h2 className="text-xl font-bold text-white">Location & Details</h2>
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">Location & Details</h2>
                     <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-lg">
-                        <h3 className="text-red-400 font-bold flex items-center gap-2">
+                        <h3 className="text-red-600 dark:text-red-400 font-bold flex items-center gap-2">
                             <span className="material-symbols-outlined">warning</span>
                             Missing Google Maps API Key
                         </h3>
-                        <p className="text-sm text-red-300 mt-2">
+                        <p className="text-sm text-red-500 dark:text-red-300 mt-2">
                             The Google Maps API key is missing or invalid. Please update <code>.env.local</code>.
                         </p>
                     </div>
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Project Name</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Project Name</label>
                     <Input
                         value={manualName}
                         onChange={e => {
@@ -260,12 +260,12 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             });
                         }}
                         placeholder="e.g., Sunset RV Park"
-                        className="w-full bg-[#283339] border-transparent text-white"
+                        className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
                     />
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Manual Property Address</label>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Manual Property Address</label>
                     <Input
                         value={manualAddress}
                         onChange={e => {
@@ -284,7 +284,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             })
                         } // Ensure save on blur for manual entry
                         placeholder="Enter address manually..."
-                        className="w-full bg-[#283339] border-transparent text-white"
+                        className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
                     />
                 </div>
             </div>

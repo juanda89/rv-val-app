@@ -21,10 +21,10 @@ export default function AuthCallbackPage() {
     }, [router]);
 
     return (
-        <div className="min-h-screen bg-[#111618] flex items-center justify-center">
+        <div className="min-h-screen bg-slate-50 dark:bg-[#111618] flex items-center justify-center">
             <div className="flex flex-col items-center gap-4">
                 <Loader2 className="w-10 h-10 text-[#13a4ec] animate-spin" />
-                <p className="text-slate-400">Finalizing login...</p>
+                <p className="text-slate-500 dark:text-slate-400">Finalizing login...</p>
             </div>
         </div>
     );

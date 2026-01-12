@@ -1,6 +1,7 @@
 import { getSheetsClient } from '@/lib/google';
 import { SHEET_MAPPING, SHEET_NAMES } from '@/config/sheetMapping';
 import { Dashboard } from '@/components/dashboard/Dashboard';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -41,10 +42,10 @@ const parseCategoryRows = (rows: any[] = []) =>
 export default async function ShareReportPage({ params }: Params) {
     if (!params?.spreadsheetId) {
         return (
-            <div className="min-h-screen bg-[#111618] text-white flex items-center justify-center">
+            <div className="min-h-screen bg-slate-50 dark:bg-[#111618] text-slate-900 dark:text-white flex items-center justify-center">
                 <div className="text-center space-y-3">
                     <h1 className="text-2xl font-bold">Report link missing</h1>
-                    <p className="text-sm text-gray-400">Please use a valid share link to access the valuation report.</p>
+                    <p className="text-sm text-slate-500 dark:text-gray-400">Please use a valid share link to access the valuation report.</p>
                 </div>
             </div>
         );
@@ -92,8 +93,11 @@ export default async function ShareReportPage({ params }: Params) {
     inputs.pnl_grouped_expenses = parseCategoryRows(groupedExpenseRows);
 
     return (
-        <div className="min-h-screen bg-[#111618] text-white">
+        <div className="min-h-screen bg-slate-50 dark:bg-[#111618] text-slate-900 dark:text-white">
             <div className="max-w-6xl mx-auto px-6 py-10">
+                <div className="flex justify-end mb-4">
+                    <ThemeToggle className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors border border-slate-200 dark:border-[#283339]" />
+                </div>
                 <Dashboard outputs={outputs} inputs={inputs} readOnly />
             </div>
         </div>
