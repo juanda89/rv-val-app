@@ -120,6 +120,8 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
     const [groupedSyncStatus, setGroupedSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
     const [groupedSyncMessage, setGroupedSyncMessage] = useState('');
     const initialDataSignatureRef = useRef<string>('');
+    const skipSyncRef = useRef(true);
+    const skipGroupedSyncRef = useRef(true);
 
     useEffect(() => {
         const nextIncome = normalizeItems(initialData?.pnl_income_items || initialData?.income_items || []);
@@ -140,6 +142,9 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
 
         if (signature === initialDataSignatureRef.current) return;
         initialDataSignatureRef.current = signature;
+
+        skipSyncRef.current = true;
+        skipGroupedSyncRef.current = true;
 
         setIncomeItems(nextIncome);
         setExpenseItems(nextExpenses);
@@ -162,6 +167,10 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
 
     useEffect(() => {
         if (!projectId) return;
+        if (skipSyncRef.current) {
+            skipSyncRef.current = false;
+            return;
+        }
         setSyncStatus('syncing');
         setSyncMessage('');
         const timeout = setTimeout(async () => {
@@ -198,6 +207,10 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
 
     useEffect(() => {
         if (!projectId) return;
+        if (skipGroupedSyncRef.current) {
+            skipGroupedSyncRef.current = false;
+            return;
+        }
         if (groupedIncome.length === 0 && groupedExpenses.length === 0) return;
         setGroupedSyncStatus('syncing');
         setGroupedSyncMessage('');

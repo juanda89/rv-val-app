@@ -9,15 +9,45 @@ export default function AuthCallbackPage() {
     const router = useRouter();
 
     useEffect(() => {
-        // Supabase handles the hash parsing automatically if we just initialize the client
-        // creating an auth listener will catch the session update
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' || session) {
-                router.replace('/valuations'); // Redirect to dashboard
+        let isActive = true;
+
+        const finalizeLogin = async () => {
+            const params = new URLSearchParams(window.location.search);
+            const error = params.get('error');
+            const code = params.get('code');
+
+            if (error) {
+                router.replace('/login?error=oauth_failed');
+                return;
+            }
+
+            if (code) {
+                const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(window.location.href);
+                if (exchangeError) {
+                    console.error('OAuth exchange failed:', exchangeError.message);
+                    router.replace('/login?error=oauth_failed');
+                    return;
+                }
+            }
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session && isActive) {
+                router.replace('/valuations');
+            }
+        };
+
+        void finalizeLogin();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session && isActive) {
+                router.replace('/valuations');
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            isActive = false;
+            subscription.unsubscribe();
+        };
     }, [router]);
 
     return (

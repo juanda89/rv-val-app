@@ -42,9 +42,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
     const equityNeeded = toNumber(outputs?.equity_needed);
     const capRate = normalizeRate(outputs?.cap_rate_entry) ?? (valuation && noiAnnual ? noiAnnual / valuation : null);
 
+    const outputCashOnCash = normalizeRate(outputs?.cash_on_cash_return ?? outputs?.cash_on_cash);
+    const outputOccupancy = normalizeRate(outputs?.current_occupancy ?? outputs?.occupancy_rate);
+
     const totalLots = toNumber(inputs?.total_lots);
     const occupiedLots = toNumber(inputs?.occupied_lots);
-    const currentOccupancy = totalLots && occupiedLots ? occupiedLots / totalLots : null;
+    const currentOccupancy = outputOccupancy ?? (totalLots && occupiedLots ? occupiedLots / totalLots : null);
 
     const groupedIncome = Array.isArray(inputs?.pnl_grouped_income) ? inputs.pnl_grouped_income : [];
     const groupedExpenses = Array.isArray(inputs?.pnl_grouped_expenses) ? inputs.pnl_grouped_expenses : [];
@@ -165,7 +168,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ outputs, inputs, onInputCh
         }
     };
 
-    const cashOnCash = noiAnnual && equityNeeded ? noiAnnual / equityNeeded : null;
+    const cashOnCash = outputCashOnCash ?? (noiAnnual && equityNeeded ? noiAnnual / equityNeeded : null);
     const mapCenter = inputs?.lat && inputs?.lng
         ? `${inputs.lat},${inputs.lng}`
         : inputs?.address

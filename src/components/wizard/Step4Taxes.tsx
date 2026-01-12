@@ -99,7 +99,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         <p className="text-sm text-slate-500 dark:text-gray-400">Configure tax assumptions for Year 2.</p>
                     </div>
                     <Button onClick={fetchRentcastData} disabled={loading || !address} variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-500/10">
-                        {loading ? "Fetching..." : "Auto-Fetch from RentCast"}
+                        {loading ? "Fetching..." : "AI Auto-Fetch"}
                     </Button>
                 </div>
             </div>

@@ -220,7 +220,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         variant="outline"
                         className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
                     >
-                        {rentcastLoading ? "Fetching..." : "Auto-Fetch from RentCast"}
+                        {rentcastLoading ? "Fetching..." : "AI Auto-Fetch"}
                     </Button>
                 </div>
                 <div className="relative">
@@ -254,6 +254,15 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">County</label>
+                    <Input
+                        value={initialData?.county || ''}
+                        onChange={(e) => onDataChange({ county: e.target.value })}
+                        placeholder="Auto-fetched"
+                        className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                    />
+                </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Parcel Number</label>
                     <Input
@@ -445,7 +454,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         variant="outline"
                         className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
                     >
-                        {rentcastLoading ? "Fetching..." : "Auto-Fetch from RentCast"}
+                        {rentcastLoading ? "Fetching..." : "AI Auto-Fetch"}
                     </Button>
                     {rentcastError && (
                         <span className="text-sm text-red-600 dark:text-red-400">{rentcastError}</span>
@@ -453,6 +462,15 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">County</label>
+                        <Input
+                            value={initialData?.county || ''}
+                            onChange={(e) => onDataChange({ county: e.target.value })}
+                            placeholder="Auto-fetched"
+                            className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                        />
+                    </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2">Parcel Number</label>
                         <Input

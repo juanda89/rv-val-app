@@ -51,6 +51,8 @@ export const SHEET_MAPPING = {
     noi_annual: "C3",
     cap_rate_entry: "C4",
     equity_needed: "C5",
-    max_loan_amount: "C6"
+    max_loan_amount: "C6",
+    cash_on_cash_return: "C7",
+    current_occupancy: "C8"
   }
 };
