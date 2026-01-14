@@ -30,9 +30,9 @@ export default function LandingPage() {
                     </div>
                     <div className="flex items-center gap-4">
                         <ThemeToggle className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors" />
-                        <Link className="hidden sm:block text-sm font-medium text-slate-700 dark:text-white hover:text-[#13a4ec] transition-colors" href="/login">Sign In</Link>
+                        <Link className="text-sm font-medium text-slate-700 dark:text-white hover:text-[#13a4ec] transition-colors" href="/login">Sign In</Link>
                         <motion.button
-                            className="bg-[#13a4ec] hover:bg-[#0f8bc7] text-white text-sm font-bold py-2.5 px-5 rounded-full transition-all shadow-[0_0_10px_rgba(19,164,236,0.2)] hover:shadow-[0_0_20px_rgba(19,164,236,0.3)] flex items-center gap-2"
+                            className="hidden sm:flex bg-[#13a4ec] hover:bg-[#0f8bc7] text-white text-sm font-bold py-2.5 px-5 rounded-full transition-all shadow-[0_0_10px_rgba(19,164,236,0.2)] hover:shadow-[0_0_20px_rgba(19,164,236,0.3)] items-center gap-2"
                             whileHover={{ scale: 1.05 }}
                             whileTap={{ scale: 0.95 }}
                             type="button"
