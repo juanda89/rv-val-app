@@ -15,6 +15,27 @@ export const CreateProjectClient = () => {
     const [projectLoading, setProjectLoading] = useState(false);
     const [projectError, setProjectError] = useState<string | null>(null);
 
+    const fetchSheetData = async (projectId: string) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
+        const response = await fetch('/api/sheet/load', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': token ? `Bearer ${token}` : ''
+            },
+            body: JSON.stringify({ projectId }),
+        });
+
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload?.error || 'Failed to load sheet data');
+        }
+
+        return payload;
+    };
+
     useEffect(() => {
         const checkUser = async () => {
             const { data: { session } } = await supabase.auth.getSession();
@@ -53,7 +74,25 @@ export const CreateProjectClient = () => {
                 setProjectError('Project not found');
                 setProjectData(null);
             } else {
-                setProjectData({ name: data.name, address: data.address, spreadsheet_id: data.spreadsheet_id });
+                try {
+                    const sheetPayload = await fetchSheetData(data.id);
+                    const inputs = sheetPayload?.inputs || {};
+                    const pnl = sheetPayload?.pnl || {};
+
+                    setProjectData({
+                        name: data.name,
+                        address: data.address,
+                        spreadsheet_id: data.spreadsheet_id,
+                        ...inputs,
+                        pnl_income_items: pnl.incomeItems || [],
+                        pnl_expense_items: pnl.expenseItems || [],
+                        pnl_grouped_income: pnl.groupedIncome || [],
+                        pnl_grouped_expenses: pnl.groupedExpenses || [],
+                    });
+                } catch (sheetError: any) {
+                    console.error('Error loading sheet data:', sheetError);
+                    setProjectData({ name: data.name, address: data.address, spreadsheet_id: data.spreadsheet_id });
+                }
             }
             setProjectLoading(false);
         };

@@ -63,6 +63,30 @@ const normalizeItems = (items: any[]): PnlItem[] => {
 const itemsSignature = (items: PnlItem[]) =>
     JSON.stringify(items.map(item => ({ name: item.name, amount: item.amount })));
 
+const buildSignature = ({
+    incomeItems,
+    expenseItems,
+    groupedIncome,
+    groupedExpenses,
+    incomeAssignments,
+    expenseAssignments,
+}: {
+    incomeItems: PnlItem[];
+    expenseItems: PnlItem[];
+    groupedIncome: GroupedItem[];
+    groupedExpenses: GroupedItem[];
+    incomeAssignments: PnlAssignment[];
+    expenseAssignments: PnlAssignment[];
+}) =>
+    JSON.stringify({
+        income: itemsSignature(incomeItems),
+        expenses: itemsSignature(expenseItems),
+        groupedIncome: JSON.stringify(groupedIncome),
+        groupedExpenses: JSON.stringify(groupedExpenses),
+        incomeAssignments: JSON.stringify(incomeAssignments),
+        expenseAssignments: JSON.stringify(expenseAssignments),
+    });
+
 const formatCurrency = (value: number) => `$${value.toLocaleString()}`;
 
 const formatDelta = (value: number) => {
@@ -120,6 +144,7 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
     const [groupedSyncStatus, setGroupedSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
     const [groupedSyncMessage, setGroupedSyncMessage] = useState('');
     const initialDataSignatureRef = useRef<string>('');
+    const localSignatureRef = useRef<string>('');
     const skipSyncRef = useRef(true);
     const skipGroupedSyncRef = useRef(true);
 
@@ -131,17 +156,21 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
         const nextIncomeAssignments = normalizeAssignments(initialData?.pnl_income_assignments || []);
         const nextExpenseAssignments = normalizeAssignments(initialData?.pnl_expense_assignments || []);
 
-        const signature = JSON.stringify({
-            income: itemsSignature(nextIncome),
-            expenses: itemsSignature(nextExpenses),
-            groupedIncome: JSON.stringify(nextGroupedIncome),
-            groupedExpenses: JSON.stringify(nextGroupedExpenses),
-            incomeAssignments: JSON.stringify(nextIncomeAssignments),
-            expenseAssignments: JSON.stringify(nextExpenseAssignments),
+        const signature = buildSignature({
+            incomeItems: nextIncome,
+            expenseItems: nextExpenses,
+            groupedIncome: nextGroupedIncome,
+            groupedExpenses: nextGroupedExpenses,
+            incomeAssignments: nextIncomeAssignments,
+            expenseAssignments: nextExpenseAssignments,
         });
 
         if (signature === initialDataSignatureRef.current) return;
         initialDataSignatureRef.current = signature;
+
+        if (signature === localSignatureRef.current) {
+            return;
+        }
 
         skipSyncRef.current = true;
         skipGroupedSyncRef.current = true;
@@ -155,6 +184,14 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
     }, [initialData]);
 
     useEffect(() => {
+        localSignatureRef.current = buildSignature({
+            incomeItems,
+            expenseItems,
+            groupedIncome,
+            groupedExpenses,
+            incomeAssignments,
+            expenseAssignments,
+        });
         onDataChange({
             pnl_income_items: incomeItems,
             pnl_expense_items: expenseItems,
@@ -333,6 +370,22 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
 
     const handleRemoveExpense = (id: string) => {
         setExpenseItems(prev => prev.filter(item => item.id !== id));
+    };
+
+    const handleIncomeItemChange = (id: string, field: 'name' | 'amount', value: string) => {
+        setIncomeItems(prev => prev.map(item => (
+            item.id === id
+                ? { ...item, [field]: field === 'amount' ? toNumber(value) : value }
+                : item
+        )));
+    };
+
+    const handleExpenseItemChange = (id: string, field: 'name' | 'amount', value: string) => {
+        setExpenseItems(prev => prev.map(item => (
+            item.id === id
+                ? { ...item, [field]: field === 'amount' ? toNumber(value) : value }
+                : item
+        )));
     };
 
     const handleGroupWithAi = async () => {
@@ -533,9 +586,18 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                         )}
                         {incomeItems.map(item => (
                             <div key={item.id} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
-                                <div>
-                                    <p className="text-sm text-slate-900 dark:text-white">{item.name}</p>
-                                    <p className="text-xs text-slate-500 dark:text-gray-400">{formatCurrency(item.amount)}</p>
+                                <div className="flex flex-1 items-center gap-2">
+                                    <input
+                                        value={item.name}
+                                        onChange={(event) => handleIncomeItemChange(item.id, 'name', event.target.value)}
+                                        className="flex-1 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-2 py-1 text-sm text-slate-900 dark:text-white"
+                                    />
+                                    <input
+                                        value={item.amount}
+                                        onChange={(event) => handleIncomeItemChange(item.id, 'amount', event.target.value)}
+                                        type="number"
+                                        className="w-28 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-2 py-1 text-sm text-slate-900 dark:text-white text-right"
+                                    />
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {hasGrouped && (
@@ -586,9 +648,18 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                         )}
                         {expenseItems.map(item => (
                             <div key={item.id} className="flex items-center justify-between rounded-lg bg-slate-100 dark:bg-[#1a2228] px-3 py-2">
-                                <div>
-                                    <p className="text-sm text-slate-900 dark:text-white">{item.name}</p>
-                                    <p className="text-xs text-slate-500 dark:text-gray-400">{formatCurrency(item.amount)}</p>
+                                <div className="flex flex-1 items-center gap-2">
+                                    <input
+                                        value={item.name}
+                                        onChange={(event) => handleExpenseItemChange(item.id, 'name', event.target.value)}
+                                        className="flex-1 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-2 py-1 text-sm text-slate-900 dark:text-white"
+                                    />
+                                    <input
+                                        value={item.amount}
+                                        onChange={(event) => handleExpenseItemChange(item.id, 'amount', event.target.value)}
+                                        type="number"
+                                        className="w-28 rounded-md bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent px-2 py-1 text-sm text-slate-900 dark:text-white text-right"
+                                    />
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {hasGrouped && (

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Step1Location } from './Step1Location';
 import { Step2RentRoll } from './Step2RentRoll';
 import { Step3PnL } from './Step3PnL';
@@ -15,6 +15,7 @@ import { ValuationUploadPanel } from '@/components/wizard/ValuationUploadPanel';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { BarChart3 } from 'lucide-react';
 import { PNL_LABELS } from '@/config/pnlMapping';
+import { SHEET_MAPPING } from '@/config/sheetMapping';
 
 const STEPS = [
     { id: 1, title: 'Property Basics', icon: 'domain' },
@@ -41,7 +42,12 @@ export const WizardLayout = ({
     const [outputs, setOutputs] = useState<any>(null); // Store sync results
     const [projectId, setProjectId] = useState<string | null>(initialProjectId || null);
     const [creatingProject, setCreatingProject] = useState(false);
+    const [nextSyncing, setNextSyncing] = useState(false);
     const { sync, isSyncing } = useSheetSync(projectId || '');
+    const pendingSyncRef = useRef<Record<string, any>>({});
+    const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const syncInFlightRef = useRef(false);
+    const inputKeys = useRef(new Set(Object.keys(SHEET_MAPPING.inputs).filter(k => k !== 'sheetName'))).current;
     const isEmptyValue = (value: any) =>
         value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
     const createItemId = () => {
@@ -131,15 +137,159 @@ export const WizardLayout = ({
     // And ensure hooks are ALWAYS called.
 
     // Cleaned up handleDataChange
+    const pickMappedInputs = React.useCallback((data: Record<string, any>) => {
+        const mapped: Record<string, any> = {};
+        Object.entries(data).forEach(([key, value]) => {
+            if (inputKeys.has(key)) {
+                mapped[key] = value;
+            }
+        });
+        return mapped;
+    }, [inputKeys]);
+
+    const flushPendingSync = React.useCallback(async (payload?: Record<string, any>) => {
+        if (!projectId) return;
+        const nextPayload = payload || pendingSyncRef.current;
+        if (!nextPayload || Object.keys(nextPayload).length === 0) return;
+
+        pendingSyncRef.current = {};
+        if (syncTimerRef.current) {
+            clearTimeout(syncTimerRef.current);
+            syncTimerRef.current = null;
+        }
+
+        if (syncInFlightRef.current) {
+            pendingSyncRef.current = { ...nextPayload, ...pendingSyncRef.current };
+            return;
+        }
+
+        syncInFlightRef.current = true;
+        try {
+            const results = await sync(nextPayload);
+            if (results) {
+                setOutputs((prev: any) => ({ ...prev, ...results }));
+            }
+        } finally {
+            syncInFlightRef.current = false;
+            if (Object.keys(pendingSyncRef.current).length > 0) {
+                await flushPendingSync();
+            }
+        }
+    }, [projectId, sync]);
+
+    const queueSync = React.useCallback((payload: Record<string, any>) => {
+        if (!projectId || Object.keys(payload).length === 0) return;
+        pendingSyncRef.current = { ...pendingSyncRef.current, ...payload };
+        if (syncTimerRef.current) {
+            clearTimeout(syncTimerRef.current);
+        }
+        syncTimerRef.current = setTimeout(() => {
+            void flushPendingSync();
+        }, 600);
+    }, [projectId, flushPendingSync]);
+
     const handleDataChange = React.useCallback(async (stepData: any) => {
         setFormData((prev: any) => ({ ...prev, ...stepData }));
 
         if (projectId) {
-            await sync(stepData).then(results => {
-                if (results) setOutputs((prev: any) => ({ ...prev, ...results }));
+            const mapped = pickMappedInputs(stepData);
+            if (Object.keys(mapped).length > 0) {
+                queueSync(mapped);
+            }
+        }
+    }, [projectId, pickMappedInputs, queueSync]);
+
+    const syncPnlPlanB = React.useCallback(async () => {
+        if (!projectId) return;
+
+        const incomeItems = Array.isArray(formData?.pnl_income_items) ? formData.pnl_income_items : [];
+        const expenseItems = Array.isArray(formData?.pnl_expense_items) ? formData.pnl_expense_items : [];
+        const groupedIncome = Array.isArray(formData?.pnl_grouped_income) ? formData.pnl_grouped_income : [];
+        const groupedExpenses = Array.isArray(formData?.pnl_grouped_expenses) ? formData.pnl_grouped_expenses : [];
+
+        const hasOriginals = incomeItems.length > 0 || expenseItems.length > 0;
+        const hasGrouped = groupedIncome.length > 0 || groupedExpenses.length > 0;
+
+        if (!hasOriginals && !hasGrouped) return;
+
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+
+        if (hasOriginals) {
+            await fetch('/api/pnl/sync', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                },
+                body: JSON.stringify({
+                    projectId,
+                    incomeItems,
+                    expenseItems
+                })
             });
         }
-    }, [projectId, sync]);
+
+        if (hasGrouped) {
+            await fetch('/api/pnl/grouped/sync', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                },
+                body: JSON.stringify({
+                    projectId,
+                    groupedIncome,
+                    groupedExpenses
+                })
+            });
+        }
+    }, [formData, projectId]);
+
+    const buildStepPayload = React.useCallback((step: number) => {
+        const mapping: Record<number, string[]> = {
+            1: [
+                'name',
+                'city',
+                'county',
+                'address',
+                'parcelNumber',
+                'population_1mile',
+                'median_income',
+                'acreage',
+                'year_built',
+                'property_type',
+                'last_sale_price',
+            ],
+            2: [
+                'total_lots',
+                'occupied_lots',
+                'current_lot_rent',
+            ],
+            4: [
+                'tax_assessed_value',
+                'tax_year',
+                'tax_assessment_rate',
+                'tax_millage_rate',
+                'tax_prev_year_amount',
+            ],
+            5: [
+                'annual_rent_growth',
+                'expense_inflation',
+                'exit_cap_rate',
+                'occupancy_target',
+            ],
+        };
+
+        const keys = mapping[step] || [];
+        const payload: Record<string, any> = {};
+        keys.forEach((key) => {
+            if (formData?.[key] !== undefined) {
+                payload[key] = formData[key];
+            }
+        });
+        return payload;
+    }, [formData]);
 
     const handleAutofill = React.useCallback(async (extracted: Record<string, any>) => {
         if (!extracted || Object.keys(extracted).length === 0) return;
@@ -275,6 +425,20 @@ export const WizardLayout = ({
             await handleStep1Complete(formData);
             return;
         }
+        if (projectId) {
+            setNextSyncing(true);
+            try {
+                const payload = buildStepPayload(currentStep);
+                if (Object.keys(payload).length > 0) {
+                    await flushPendingSync(payload);
+                }
+                if (currentStep === 3) {
+                    await syncPnlPlanB();
+                }
+            } finally {
+                setNextSyncing(false);
+            }
+        }
         setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
     };
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
@@ -345,10 +509,12 @@ export const WizardLayout = ({
                                     disabled={
                                         currentStep === STEPS.length ||
                                         (!projectId && currentStep === 1 && !formData.address) ||
-                                        (pnlGateBlocked && currentStep >= 3)
+                                        (pnlGateBlocked && currentStep >= 3) ||
+                                        nextSyncing ||
+                                        isSyncing
                                     }
                                 >
-                                    {creatingProject ? "Creating..." : "Next"}
+                                    {creatingProject ? "Creating..." : nextSyncing || isSyncing ? "Syncing..." : "Next"}
                                 </Button>
                             )}
                         </div>
