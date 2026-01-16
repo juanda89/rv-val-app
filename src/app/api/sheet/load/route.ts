@@ -9,7 +9,7 @@ const toNumber = (value: unknown) => {
     return Number.isFinite(parsed) ? parsed : null;
 };
 
-const parseRows = (rows?: any[][], labelIndex = 0, valueIndex = 1) => {
+const parseRows = (rows?: any[][] | null, labelIndex = 0, valueIndex = 1) => {
     if (!Array.isArray(rows)) return [];
     return rows
         .map((row) => ({
@@ -19,14 +19,14 @@ const parseRows = (rows?: any[][], labelIndex = 0, valueIndex = 1) => {
         .filter((row) => row.label);
 };
 
-const buildItems = (rows?: any[][]) =>
+const buildItems = (rows?: any[][] | null) =>
     parseRows(rows).map((row) => ({
         id: `${row.label}-${Math.random().toString(16).slice(2)}`,
         name: row.label,
         amount: toNumber(row.value) ?? 0,
     }));
 
-const buildGroupedItems = (rows?: any[][]) =>
+const buildGroupedItems = (rows?: any[][] | null) =>
     parseRows(rows).map((row) => ({
         category: row.label,
         total: toNumber(row.value) ?? 0,
