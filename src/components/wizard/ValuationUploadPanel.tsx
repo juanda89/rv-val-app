@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 
 type UploadStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -9,6 +10,10 @@ interface ValuationUploadPanelProps {
 }
 
 const SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf'];
+const STORAGE_BUCKET = 'valuation-uploads';
+
+const sanitizeFileName = (name: string) =>
+    name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
 
 export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAutofill }) => {
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -27,18 +32,53 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
         }
     };
 
+    const uploadToStorage = async (file: File) => {
+        const safeName = sanitizeFileName(file.name);
+        const filePath = `uploads/${Date.now()}-${safeName}`;
+
+        const { error } = await supabase.storage
+            .from(STORAGE_BUCKET)
+            .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: true,
+                contentType: file.type || 'application/octet-stream'
+            });
+
+        if (error) {
+            throw new Error(error.message || 'Storage upload failed');
+        }
+
+        const { data: signed, error: signedError } = await supabase.storage
+            .from(STORAGE_BUCKET)
+            .createSignedUrl(filePath, 60 * 60);
+
+        if (!signedError && signed?.signedUrl) {
+            return signed.signedUrl;
+        }
+
+        const { data: publicUrl } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(filePath);
+        if (!publicUrl?.publicUrl) {
+            throw new Error('Unable to generate file URL');
+        }
+
+        return publicUrl.publicUrl;
+    };
+
     const processFile = async (file: File) => {
         setStatus('loading');
         setMessage('Uploading file and analyzing with AI...');
         setFileName(file.name);
 
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const response = await fetch('/api/valuation/analyze', {
+            const fileUrl = await uploadToStorage(file);
+            const response = await fetch('/api/valuation/analyze-url', {
                 method: 'POST',
-                body: formData
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fileUrl,
+                    fileName: file.name,
+                    mimeType: file.type || ''
+                })
             });
 
             const payload = await response.json();
@@ -52,7 +92,11 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
         } catch (error: any) {
             console.error('Gemini analysis failed:', error);
             setStatus('error');
-            setMessage('No fue posible analizar el documento. Intenta con otro archivo o revisa el formato.');
+            setMessage(
+                error?.message?.includes('Storage')
+                    ? 'No fue posible subir el archivo. Verifica el bucket de Storage.'
+                    : 'No fue posible analizar el documento. Intenta con otro archivo o revisa el formato.'
+            );
         } finally {
             setTimeout(reset, 2500);
         }
