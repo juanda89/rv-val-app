@@ -13,6 +13,8 @@ interface Step4Props {
 
 export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, address }) => {
     const pdfValues = initialData?.pdf_values || {};
+    const hasParcel = Boolean(initialData?.parcelNumber || initialData?.parcel_1);
+    const canFetchAttom = Boolean(address || hasParcel);
     const [data, setData] = useState({
         tax_assessed_value: initialData?.tax_assessed_value || '',
         tax_year: initialData?.tax_year || '',
@@ -119,14 +121,18 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
     ]);
 
     const fetchAttomData = async () => {
-        if (!address) return;
+        if (!address && !initialData?.parcelNumber && !initialData?.parcel_1) return;
         setLoading(true);
         setError(null);
         try {
             const res = await fetch('/api/attom/property', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address }),
+                body: JSON.stringify({
+                    address,
+                    apn: initialData?.parcelNumber || initialData?.parcel_1,
+                    fips: initialData?.fips_code,
+                }),
             });
             const json = await res.json();
 
@@ -181,7 +187,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Taxes</h2>
                         <p className="text-sm text-slate-500 dark:text-gray-400">Configure tax assumptions for Year 2.</p>
                     </div>
-                    <Button onClick={fetchAttomData} disabled={loading || !address} variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-500/10">
+                    <Button onClick={fetchAttomData} disabled={loading || !canFetchAttom} variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-500/10">
                         {loading ? "Fetching..." : "AI Auto-Fill"}
                     </Button>
                 </div>

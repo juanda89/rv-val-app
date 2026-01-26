@@ -292,10 +292,10 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
         if (!initialData?.median_property_value_change && demographics.median_property_value_change) {
             updates.median_property_value_change = demographics.median_property_value_change;
         }
-        if (!initialData?.violent_crime && demographics.violent_crime) {
+        if (isEmptyValue(initialData?.violent_crime) && demographics.violent_crime !== null && demographics.violent_crime !== undefined) {
             updates.violent_crime = demographics.violent_crime;
         }
-        if (!initialData?.property_crime && demographics.property_crime) {
+        if (isEmptyValue(initialData?.property_crime) && demographics.property_crime !== null && demographics.property_crime !== undefined) {
             updates.property_crime = demographics.property_crime;
         }
         if (!initialData?.two_br_rent && demographics.two_br_rent) {
@@ -829,11 +829,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Violent Crime"
                             fieldKey="violent_crime"
-                            currentValue={initialData?.violent_crime || ''}
+                            currentValue={initialData?.violent_crime ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.violent_crime || ''}
+                            value={initialData?.violent_crime ?? ''}
                             onChange={(e) => onDataChange({ violent_crime: e.target.value })}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
@@ -842,11 +842,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Property Crime"
                             fieldKey="property_crime"
-                            currentValue={initialData?.property_crime || ''}
+                            currentValue={initialData?.property_crime ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.property_crime || ''}
+                            value={initialData?.property_crime ?? ''}
                             onChange={(e) => onDataChange({ property_crime: e.target.value })}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
@@ -1477,11 +1477,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             <DiscrepancyLabel
                                 label="Violent Crime"
                                 fieldKey="violent_crime"
-                                currentValue={initialData?.violent_crime || ''}
+                                currentValue={initialData?.violent_crime ?? ''}
                                 pdfValues={pdfValues}
                             />
                             <Input
-                                value={initialData?.violent_crime || ''}
+                                value={initialData?.violent_crime ?? ''}
                                 onChange={(e) => onDataChange({ violent_crime: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                             />
@@ -1490,11 +1490,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             <DiscrepancyLabel
                                 label="Property Crime"
                                 fieldKey="property_crime"
-                                currentValue={initialData?.property_crime || ''}
+                                currentValue={initialData?.property_crime ?? ''}
                                 pdfValues={pdfValues}
                             />
                             <Input
-                                value={initialData?.property_crime || ''}
+                                value={initialData?.property_crime ?? ''}
                                 onChange={(e) => onDataChange({ property_crime: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                             />

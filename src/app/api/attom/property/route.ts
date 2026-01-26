@@ -57,6 +57,12 @@ const pickNumber = (...values: Array<unknown>) => {
     return null;
 };
 
+const avgNumbers = (...values: Array<number | null>) => {
+    const nums = values.filter((value): value is number => value !== null && Number.isFinite(value));
+    if (nums.length === 0) return null;
+    return Number((nums.reduce((sum, value) => sum + value, 0) / nums.length).toFixed(2));
+};
+
 const getYearValue = (item: Record<string, any>) =>
     item?.tax?.taxYear ?? item?.taxYear ?? item?.assessmentYear ?? item?.year ?? null;
 
@@ -553,9 +559,22 @@ const fetchCensusMetrics = async (fipsCode: string, year: number) => {
 
 export async function POST(req: Request) {
     try {
-        const { address, lat, lng } = await req.json();
-        if (!address && (lat === undefined || lng === undefined)) {
-            return NextResponse.json({ error: 'Missing address' }, { status: 400 });
+        const body = await req.json();
+        const address = body?.address;
+        const lat = body?.lat;
+        const lng = body?.lng;
+        const apnRaw = body?.apn || body?.parcelNumber || body?.parcel_1;
+        const fipsRaw = body?.fips || body?.fips_code;
+        const apn =
+            apnRaw === null || apnRaw === undefined
+                ? null
+                : String(apnRaw).trim().replace(/\s+/g, '');
+        const fips =
+            fipsRaw === null || fipsRaw === undefined
+                ? null
+                : String(fipsRaw).trim().replace(/\s+/g, '');
+        if (!address && (lat === undefined || lng === undefined) && !(apn && fips)) {
+            return NextResponse.json({ error: 'Missing address or parcel info' }, { status: 400 });
         }
 
         const apiKey = process.env.ATTOM_API_KEY;
@@ -621,7 +640,22 @@ export async function POST(req: Request) {
         let property: any = null;
         let source = 'address';
 
-        if (address) {
+        if (apn && fips) {
+            const parcelResponse = await fetchExpandedByParcel(apn, fips);
+            if (parcelResponse.response.ok) {
+                payload = parcelResponse.payload;
+                response = parcelResponse.response;
+                property = await selectBestProperty(extractProperties(payload), selectionContext);
+                if (property) {
+                    source = 'parcel_fips';
+                }
+            } else if (!address && (lat === undefined || lng === undefined)) {
+                response = parcelResponse.response;
+                payload = parcelResponse.payload;
+            }
+        }
+
+        if (!property && address) {
             const primary = await fetchBasic(String(address));
             response = primary.response;
             payload = primary.payload;
@@ -757,14 +791,14 @@ export async function POST(req: Request) {
             fipsCode = await fetchCountyFips(lookupState, lookupCounty);
         }
 
-        const apn =
+        const propertyApn =
             property?.identifier?.apn ||
             property?.identifier?.apnOrig ||
             property?.identifier?.parcelId ||
             null;
 
-        if (apn && fipsCode) {
-            const parcelResponse = await fetchExpandedByParcel(String(apn).trim(), String(fipsCode).trim());
+        if (propertyApn && fipsCode) {
+            const parcelResponse = await fetchExpandedByParcel(String(propertyApn).trim(), String(fipsCode).trim());
             if (parcelResponse.response.ok) {
                 const parcelProperty = await selectBestProperty(
                     extractProperties(parcelResponse.payload),
@@ -823,32 +857,47 @@ export async function POST(req: Request) {
             latestAssessment?.assessed?.value,
             latestAssessment?.assessed?.total,
             latestAssessment?.assessed?.valueTotal,
+            latestAssessment?.assessed?.assdTtlValue,
+            latestAssessment?.assessed?.assdImprValue,
+            latestAssessment?.assessed?.assdLandValue,
             latestAssessment?.assessedValue,
             latestAssessment?.totalAssessedValue,
             latestAssessment?.value,
             property?.assessment?.assessed?.value,
+            property?.assessment?.assessed?.assdTtlValue,
+            property?.assessment?.assessed?.assdImprValue,
+            property?.assessment?.assessed?.assdLandValue,
             property?.assessment?.assessedValue
         );
 
         const taxAmount = pickNumber(
             latestTax?.tax?.amount?.total,
             latestTax?.tax?.taxAmount,
+            latestTax?.tax?.taxAmt,
             latestTax?.taxAmount,
             latestTax?.amount?.total,
             latestTax?.amount,
             property?.tax?.amount?.total,
-            property?.tax?.taxAmount
+            property?.tax?.taxAmount,
+            property?.assessment?.tax?.taxAmt,
+            property?.assessment?.tax?.taxAmount
         );
 
         const previousTaxAmount = pickNumber(
             previousTax?.tax?.amount?.total,
             previousTax?.tax?.taxAmount,
+            previousTax?.tax?.taxAmt,
             previousTax?.taxAmount,
             previousTax?.amount?.total,
             previousTax?.amount
         );
 
-        const taxYear = getYearValue(latestTax) ?? getYearValue(latestAssessment);
+        const taxYear = getYearValue(latestTax)
+            ?? latestTax?.tax?.taxYear
+            ?? latestTax?.taxYear
+            ?? property?.assessment?.tax?.taxYear
+            ?? property?.assessment?.tax?.taxyear
+            ?? getYearValue(latestAssessment);
 
         const millageRate =
             taxAmount !== null && assessedValue !== null && assessedValue !== 0
@@ -867,10 +916,16 @@ export async function POST(req: Request) {
             latestAssessment?.marketValue,
             latestAssessment?.market?.total,
             latestAssessment?.market?.valueTotal,
+            latestAssessment?.market?.mktTtlValue,
+            latestAssessment?.market?.mktImprValue,
+            latestAssessment?.market?.mktLandValue,
             property?.assessment?.market?.value,
             property?.assessment?.marketValue,
             property?.assessment?.market?.total,
-            property?.assessment?.market?.valueTotal
+            property?.assessment?.market?.valueTotal,
+            property?.assessment?.market?.mktTtlValue,
+            property?.assessment?.market?.mktImprValue,
+            property?.assessment?.market?.mktLandValue
         );
 
         const assessmentRatio =
@@ -967,8 +1022,31 @@ export async function POST(req: Request) {
             communityDemo?.housing_Median_Rent,
             communityDemo?.housing_Median_Rent
         );
-        const communityViolentCrime = pickNumber(communityCrime?.aggravated_Assault_Index);
-        const communityPropertyCrime = pickNumber(communityCrime?.motor_Vehicle_Theft_Index);
+        const communityViolentCrime = pickNumber(communityCrime?.aggravated_Assault_Index)
+            ?? pickNumber(
+                communityCrime?.violentCrime_Index,
+                communityCrime?.violent_Crime_Index,
+                communityCrime?.violentCrime,
+                communityCrime?.violent_crime
+            )
+            ?? avgNumbers(
+                pickNumber(communityCrime?.murder_Index),
+                pickNumber(communityCrime?.forcible_Rape_Index),
+                pickNumber(communityCrime?.forcible_Robbery_Index),
+                pickNumber(communityCrime?.aggravated_Assault_Index)
+            );
+        const communityPropertyCrime = pickNumber(communityCrime?.motor_Vehicle_Theft_Index)
+            ?? pickNumber(
+                communityCrime?.propertyCrime_Index,
+                communityCrime?.property_Crime_Index,
+                communityCrime?.propertyCrime,
+                communityCrime?.property_crime
+            )
+            ?? avgNumbers(
+                pickNumber(communityCrime?.burglary_Index),
+                pickNumber(communityCrime?.larceny_Index),
+                pickNumber(communityCrime?.motor_Vehicle_Theft_Index)
+            );
 
         const attomPopulation = pickNumber(
             property?.demographics?.population,
