@@ -1022,13 +1022,14 @@ export async function POST(req: Request) {
             communityDemo?.housing_Median_Rent,
             communityDemo?.housing_Median_Rent
         );
-        const communityViolentCrime = pickNumber(communityCrime?.aggravated_Assault_Index)
+        const communityViolentCrime = pickNumber(communityCrime?.crime_Index)
             ?? pickNumber(
                 communityCrime?.violentCrime_Index,
                 communityCrime?.violent_Crime_Index,
                 communityCrime?.violentCrime,
                 communityCrime?.violent_crime
             )
+            ?? pickNumber(communityCrime?.aggravated_Assault_Index)
             ?? avgNumbers(
                 pickNumber(communityCrime?.murder_Index),
                 pickNumber(communityCrime?.forcible_Rape_Index),
