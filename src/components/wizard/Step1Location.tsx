@@ -292,11 +292,14 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
         if (!initialData?.median_property_value_change && demographics.median_property_value_change) {
             updates.median_property_value_change = demographics.median_property_value_change;
         }
-        if (isEmptyValue(initialData?.violent_crime) && demographics.violent_crime !== null && demographics.violent_crime !== undefined) {
-            updates.violent_crime = demographics.violent_crime;
+        const crimeDetails = demographicsDetails?.crime || {};
+        const violentCrimeValue = demographics.violent_crime ?? crimeDetails?.crime_Index ?? crimeDetails?.aggravated_Assault_Index ?? null;
+        const propertyCrimeValue = demographics.property_crime ?? crimeDetails?.motor_Vehicle_Theft_Index ?? null;
+        if (violentCrimeValue !== null && violentCrimeValue !== undefined) {
+            updates.violent_crime = violentCrimeValue;
         }
-        if (isEmptyValue(initialData?.property_crime) && demographics.property_crime !== null && demographics.property_crime !== undefined) {
-            updates.property_crime = demographics.property_crime;
+        if (propertyCrimeValue !== null && propertyCrimeValue !== undefined) {
+            updates.property_crime = propertyCrimeValue;
         }
         if (!initialData?.two_br_rent && demographics.two_br_rent) {
             updates.two_br_rent = demographics.two_br_rent;
@@ -358,7 +361,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                 throw new Error(payload?.error || 'ATTOM request failed');
             }
             applyAttomData(payload);
-            setAttomMessage(`ATTOM: data found${payload?.source ? ` (${payload.source})` : ''}`);
+            setAttomMessage(`AI: data found${payload?.source ? ` (${payload.source})` : ''}`);
         } catch (error: any) {
             console.error('ATTOM fetch failed:', error);
             setAttomError(error.message || 'ATTOM request failed');
@@ -998,7 +1001,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
             const demographics = payload?.demographics_economics || {};
             const housing = payload?.housing_crisis_metrics || {};
             const demographicsDetails = payload?.demographics_details || null;
-            setAttomMessage(`ATTOM: data found${payload?.source ? ` (${payload.source})` : ''}`);
+            setAttomMessage(`AI: data found${payload?.source ? ` (${payload.source})` : ''}`);
             const normalizeComparable = (value: any) =>
                 String(value ?? '')
                     .toLowerCase()
@@ -1006,6 +1009,9 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                     .trim();
             const shouldOverrideWithAttom = (currentValue: any, pdfValue: any) =>
                 isEmptyValue(currentValue) || normalizeComparable(currentValue) === normalizeComparable(pdfValue);
+            const crimeDetails = demographicsDetails?.crime || {};
+            const violentCrimeValue = demographics.violent_crime ?? crimeDetails?.crime_Index ?? crimeDetails?.aggravated_Assault_Index ?? null;
+            const propertyCrimeValue = demographics.property_crime ?? crimeDetails?.motor_Vehicle_Theft_Index ?? null;
             const updates: Record<string, any> = {
                 mobile_home_park_name: manualName || initialData?.mobile_home_park_name,
                 population: demographics.population ?? initialData?.population,
@@ -1017,8 +1023,8 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                 number_of_employees_change: demographics.number_of_employees_change ?? initialData?.number_of_employees_change,
                 median_property_value: demographics.median_property_value ?? initialData?.median_property_value,
                 median_property_value_change: demographics.median_property_value_change ?? initialData?.median_property_value_change,
-                violent_crime: demographics.violent_crime ?? initialData?.violent_crime,
-                property_crime: demographics.property_crime ?? initialData?.property_crime,
+                violent_crime: violentCrimeValue ?? initialData?.violent_crime,
+                property_crime: propertyCrimeValue ?? initialData?.property_crime,
                 two_br_rent: demographics.two_br_rent ?? initialData?.two_br_rent,
                 eli_renter_households: housing.eli_renter_households ?? initialData?.eli_renter_households,
                 units_per_100: housing.affordable_units_per_100 ?? initialData?.units_per_100,

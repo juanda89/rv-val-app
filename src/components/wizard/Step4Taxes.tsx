@@ -11,6 +11,17 @@ interface Step4Props {
     address?: string;
 }
 
+const formatThousands = (value: string | number) => {
+    if (value === null || value === undefined) return '';
+    const raw = String(value).replace(/[^\d.]/g, '');
+    if (!raw) return '';
+    const [intPart, decPart] = raw.split('.');
+    const formattedInt = Number(intPart || 0).toLocaleString('en-US');
+    return decPart !== undefined && decPart !== '' ? `${formattedInt}.${decPart}` : formattedInt;
+};
+
+const normalizeCurrencyInput = (value: string) => value.replace(/[^\d.]/g, '');
+
 export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, address }) => {
     const pdfValues = initialData?.pdf_values || {};
     const hasParcel = Boolean(initialData?.parcelNumber || initialData?.parcel_1);
@@ -179,6 +190,10 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
         });
     };
 
+    const handleCurrencyChange = (field: string, val: string) => {
+        handleChange(field, normalizeCurrencyInput(val));
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-3">
@@ -204,9 +219,9 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                     <div className="relative">
                         <span className="absolute left-3 top-2 text-slate-400">$</span>
                         <Input
-                            type="number"
-                            value={data.tax_assessed_value}
-                            onChange={e => handleChange('tax_assessed_value', e.target.value)}
+                            type="text"
+                            value={formatThousands(data.tax_assessed_value)}
+                            onChange={e => handleCurrencyChange('tax_assessed_value', e.target.value)}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pl-8"
                             placeholder="0.00"
                         />
@@ -276,9 +291,9 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                     <div className="relative">
                         <span className="absolute left-3 top-2 text-slate-400">$</span>
                         <Input
-                            type="number"
-                            value={data.tax_prev_year_amount}
-                            onChange={e => handleChange('tax_prev_year_amount', e.target.value)}
+                            type="text"
+                            value={formatThousands(data.tax_prev_year_amount)}
+                            onChange={e => handleCurrencyChange('tax_prev_year_amount', e.target.value)}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pl-8"
                             placeholder="0.00"
                         />
@@ -297,8 +312,8 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={data.fair_market_value}
-                            onChange={e => handleChange('fair_market_value', e.target.value)}
+                            value={formatThousands(data.fair_market_value)}
+                            onChange={e => handleCurrencyChange('fair_market_value', e.target.value)}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
                     </div>
