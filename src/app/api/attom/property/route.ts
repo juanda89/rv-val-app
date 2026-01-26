@@ -3,12 +3,37 @@ import { lookupHudChas } from '@/lib/hudChas';
 
 export const runtime = 'nodejs';
 
+type PropertySelectionContext = {
+    address?: string;
+    normalizedAddress?: string;
+    lat?: number;
+    lng?: number;
+    apiKey?: string | null;
+};
+
+type PropertyCandidate = {
+    index: number;
+    address: string | null;
+    line1: string | null;
+    city: string | null;
+    state: string | null;
+    zip: string | null;
+    apn: string | null;
+    attomId: string | null;
+    propertyType: string | null;
+    latitude: number | null;
+    longitude: number | null;
+};
+
 const ATTOM_BASIC_ENDPOINT = 'https://api.gateway.attomdata.com/propertyapi/v1.0.0/property/basicprofile';
 const ATTOM_DETAIL_ENDPOINT = 'https://api.gateway.attomdata.com/propertyapi/v1.0.0/property/detail';
 const ATTOM_SNAPSHOT_ENDPOINT = 'https://api.gateway.attomdata.com/propertyapi/v1.0.0/property/snapshot';
 const ATTOM_EXPANDED_ENDPOINT = 'https://api.gateway.attomdata.com/propertyapi/v1.0.0/property/expandedprofile';
 const ATTOM_COMMUNITY_ENDPOINT = 'https://api.gateway.attomdata.com/v4/neighborhood/community';
 const ATTOM_LOCATION_LOOKUP_ENDPOINT = 'https://api.gateway.attomdata.com/v4/location/lookup';
+const TREASURY_YIELD_XML_URL = 'https://home.treasury.gov/sites/default/files/interest-rates/yield.xml';
+const TREASURY_YIELD_YEAR_URL = (year: number) =>
+    `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=${year}`;
 
 const normalizeAddress = (value: string) =>
     value.replace(/,?\s*USA$/i, '').replace(/\s+/g, ' ').trim();
@@ -49,15 +74,71 @@ const normalizeYearItems = (items?: any[] | Record<string, any>) => {
     });
 };
 
-const getLatestByYear = (items?: any[] | Record<string, any>) => {
+const getSortedByYear = (items?: any[] | Record<string, any>) => {
     const normalized = normalizeYearItems(items);
-    if (normalized.length === 0) return null;
-    const sorted = [...normalized].sort((a, b) => {
+    if (normalized.length === 0) return [];
+    return [...normalized].sort((a, b) => {
         const aYear = getYearValue(a) ?? 0;
         const bYear = getYearValue(b) ?? 0;
         return bYear - aYear;
     });
-    return sorted[0];
+};
+
+const getLatestByYear = (items?: any[] | Record<string, any>) => getSortedByYear(items)[0] || null;
+
+const getPreviousByYear = (items?: any[] | Record<string, any>) => getSortedByYear(items)[1] || null;
+
+const extractXmlTagValue = (chunk: string, tagNames: string[]) => {
+    for (const tag of tagNames) {
+        const regex = new RegExp(`<(?:d:)?${tag}[^>]*>([^<]+)<\\/` + `(?:d:)?${tag}>`, 'i');
+        const match = chunk.match(regex);
+        if (match?.[1]) return match[1].trim();
+    }
+    return null;
+};
+
+const parseTreasuryYieldXml = (xml: string) => {
+    const entryRegex = /<entry\b[^>]*>[\s\S]*?<\/entry>/gi;
+    const entries = xml.match(entryRegex) || [];
+    if (entries.length === 0) return null;
+
+    const dateTags = ['NEW_DATE', 'record_date', 'DATE', 'date'];
+    const rateTags = ['BC_10YEAR', 'BC_10Y', 'BC_10YR'];
+
+    let latestDate: Date | null = null;
+    let latestRate: number | null = null;
+
+    for (const entry of entries) {
+        const dateValue = extractXmlTagValue(entry, dateTags);
+        const rateValue = extractXmlTagValue(entry, rateTags);
+        if (!dateValue || !rateValue) continue;
+        const parsedDate = new Date(dateValue);
+        const parsedRate = Number(rateValue);
+        if (!Number.isFinite(parsedRate) || Number.isNaN(parsedDate.valueOf())) continue;
+        if (!latestDate || parsedDate > latestDate) {
+            latestDate = parsedDate;
+            latestRate = parsedRate;
+        }
+    }
+
+    return latestRate !== null
+        ? { date: latestDate?.toISOString().slice(0, 10) ?? null, rate: latestRate }
+        : null;
+};
+
+const fetchTreasury10YearYield = async () => {
+    const tryFetch = async (url: string) => {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const xml = await response.text();
+        return parseTreasuryYieldXml(xml);
+    };
+
+    const fromDaily = await tryFetch(TREASURY_YIELD_XML_URL);
+    if (fromDaily?.rate !== null && fromDaily?.rate !== undefined) return fromDaily;
+
+    const year = new Date().getFullYear();
+    return tryFetch(TREASURY_YIELD_YEAR_URL(year));
 };
 
 const toAcres = (lotSizeSqft: number | null) => {
@@ -167,12 +248,197 @@ const splitAddress = (value: string) => {
     };
 };
 
-const extractProperty = (payload: any) =>
-    payload?.property?.[0] ||
-    payload?.property ||
-    payload?.properties?.[0] ||
-    payload?.Property?.[0] ||
-    null;
+const extractProperties = (payload: any) => {
+    const candidates =
+        payload?.property ||
+        payload?.properties ||
+        payload?.Property ||
+        payload?.Properties ||
+        null;
+    if (Array.isArray(candidates)) return candidates.filter(Boolean);
+    if (candidates && typeof candidates === 'object') return [candidates];
+    return [];
+};
+
+const getPropertyAddressParts = (property: Record<string, any>) => {
+    const addressData = property?.address || {};
+    return {
+        line1: addressData?.line1 || addressData?.address1 || addressData?.street || '',
+        city: addressData?.locality || addressData?.city || '',
+        state: addressData?.countrySubd || addressData?.state || '',
+        zip: addressData?.postal1 || addressData?.zip || '',
+    };
+};
+
+const formatAddressParts = (parts: { line1?: string; city?: string; state?: string; zip?: string }) =>
+    [parts.line1, parts.city, parts.state, parts.zip].filter(Boolean).join(', ').trim();
+
+const normalizeMatchValue = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const scoreCandidateMatch = (candidate: PropertyCandidate, target: string) => {
+    if (!target) return 0;
+    const address = candidate.address || '';
+    if (!address) return 0;
+    const normalizedTarget = normalizeMatchValue(target);
+    const normalizedAddress = normalizeMatchValue(address);
+    if (!normalizedTarget || !normalizedAddress) return 0;
+
+    let score = 0;
+    if (normalizedAddress === normalizedTarget) score += 100;
+    if (normalizedAddress.includes(normalizedTarget) || normalizedTarget.includes(normalizedAddress)) score += 50;
+
+    const targetZip = target.match(/\b\d{5}(?:-\d{4})?\b/)?.[0];
+    if (targetZip && candidate.zip && candidate.zip.startsWith(targetZip.slice(0, 5))) score += 10;
+
+    const targetNumber = target.match(/\d+/)?.[0];
+    if (targetNumber && address.includes(targetNumber)) score += 5;
+
+    if (candidate.state && target.toLowerCase().includes(candidate.state.toLowerCase())) score += 5;
+    if (candidate.city && target.toLowerCase().includes(candidate.city.toLowerCase())) score += 5;
+
+    return score;
+};
+
+const pickBestCandidateIndex = (candidates: PropertyCandidate[], context: PropertySelectionContext) => {
+    const target = context.address || context.normalizedAddress || '';
+    if (!target) return 0;
+
+    let bestIndex = 0;
+    let bestScore = -1;
+
+    for (const candidate of candidates) {
+        const score = scoreCandidateMatch(candidate, target);
+        if (score > bestScore) {
+            bestScore = score;
+            bestIndex = candidate.index;
+        }
+    }
+
+    return bestIndex;
+};
+
+const summarizePropertyCandidate = (property: Record<string, any>, index: number): PropertyCandidate => {
+    const parts = getPropertyAddressParts(property);
+    const summary = property?.summary || {};
+    const attomId =
+        property?.identifier?.attomId ||
+        property?.identifier?.attomid ||
+        property?.attomId ||
+        property?.attomid ||
+        null;
+    const apn =
+        property?.identifier?.apn ||
+        property?.identifier?.apnOrig ||
+        property?.identifier?.parcelId ||
+        null;
+    const latitude =
+        property?.location?.latitude ||
+        property?.location?.lat ||
+        property?.address?.latitude ||
+        property?.address?.lat ||
+        null;
+    const longitude =
+        property?.location?.longitude ||
+        property?.location?.lng ||
+        property?.address?.longitude ||
+        property?.address?.lng ||
+        null;
+
+    return {
+        index,
+        address: formatAddressParts(parts) || null,
+        line1: parts.line1 || null,
+        city: parts.city || null,
+        state: parts.state || null,
+        zip: parts.zip || null,
+        apn,
+        attomId,
+        propertyType: summary?.propclass || summary?.propType || summary?.propertyType || null,
+        latitude: latitude ? Number(latitude) : null,
+        longitude: longitude ? Number(longitude) : null,
+    };
+};
+
+const buildPropertySelectionPrompt = (context: PropertySelectionContext, candidates: PropertyCandidate[]) => {
+    const targetAddress = context.address || '';
+    const normalized = context.normalizedAddress || '';
+    const lat = context.lat ?? null;
+    const lng = context.lng ?? null;
+
+    return `
+You are selecting the single best matching property from ATTOM results.
+
+Target:
+- address: ${targetAddress}
+- normalized_address: ${normalized}
+- latitude: ${lat}
+- longitude: ${lng}
+
+Candidates (JSON array):
+${JSON.stringify(candidates)}
+
+Return ONLY JSON: {"index": number}
+Choose the closest match if unsure.
+`;
+};
+
+const callGeminiSelection = async (apiKey: string, prompt: string) => {
+    const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:generateContent?key=${apiKey}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0,
+                    response_mime_type: 'application/json',
+                },
+            }),
+        }
+    );
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Gemini request failed: ${errorText}`);
+    }
+
+    const json = await response.json();
+    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text || typeof text !== 'string') {
+        throw new Error('Gemini returned no content');
+    }
+
+    return JSON.parse(text);
+};
+
+const selectBestProperty = async (
+    properties: Record<string, any>[],
+    context: PropertySelectionContext
+) => {
+    if (properties.length === 0) return null;
+    if (properties.length === 1) return properties[0];
+    if (!context.apiKey) {
+        throw new Error('Missing GEMINI_API_KEY');
+    }
+
+    const candidates = properties.map((property, index) => summarizePropertyCandidate(property, index));
+
+    try {
+        const prompt = buildPropertySelectionPrompt(context, candidates);
+        const selection = await callGeminiSelection(context.apiKey, prompt);
+        const index = Number(selection?.index);
+        if (Number.isInteger(index) && index >= 0 && index < properties.length) {
+            return properties[index];
+        }
+    } catch (error) {
+        console.warn('Gemini property selection failed:', error);
+    }
+
+    const fallbackIndex = pickBestCandidateIndex(candidates, context);
+    return properties[fallbackIndex] || properties[0];
+};
 
 const findGeoIdV4 = (payload: any, maxDepth = 4) => {
     const visited = new Set<any>();
@@ -230,12 +496,6 @@ const findGeoIdFromLocationLookup = (payload: any, preferredType?: string) => {
     }
 
     return findGeoIdV4(payload);
-};
-
-const avgNumbers = (...values: Array<number | null>) => {
-    const nums = values.filter((value): value is number => value !== null && Number.isFinite(value));
-    if (nums.length === 0) return null;
-    return Number((nums.reduce((sum, value) => sum + value, 0) / nums.length).toFixed(2));
 };
 
 const extractAddressLines = (property: Record<string, any>, fallbackAddress: string) => {
@@ -302,6 +562,7 @@ export async function POST(req: Request) {
         if (!apiKey) {
             return NextResponse.json({ error: 'Missing ATTOM_API_KEY' }, { status: 500 });
         }
+        const geminiApiKey = process.env.GEMINI_API_KEY;
 
         const fetchBasic = async (rawAddress: string) => {
             const { address1, address2 } = splitAddress(rawAddress);
@@ -333,7 +594,28 @@ export async function POST(req: Request) {
             return { response, payload };
         };
 
+        const fetchExpandedByParcel = async (apn: string, fips: string) => {
+            const params = new URLSearchParams();
+            params.set('apn', apn);
+            params.set('fips', fips);
+            const response = await fetch(`${ATTOM_EXPANDED_ENDPOINT}?${params.toString()}`, {
+                headers: {
+                    apikey: apiKey,
+                    Accept: 'application/json',
+                },
+            });
+            const payload = await response.json();
+            return { response, payload };
+        };
+
         const normalizedAddress = address ? normalizeAddress(String(address)) : '';
+        const selectionContext: PropertySelectionContext = {
+            address: address ? String(address) : undefined,
+            normalizedAddress: normalizedAddress || undefined,
+            lat: lat !== undefined ? Number(lat) : undefined,
+            lng: lng !== undefined ? Number(lng) : undefined,
+            apiKey: geminiApiKey,
+        };
         let response: Response | null = null;
         let payload: any = null;
         let property: any = null;
@@ -343,14 +625,19 @@ export async function POST(req: Request) {
             const primary = await fetchBasic(String(address));
             response = primary.response;
             payload = primary.payload;
-            property = extractProperty(payload);
+            property = await selectBestProperty(extractProperties(payload), selectionContext);
 
             if ((response.ok && !property) || (!response.ok && normalizedAddress && normalizedAddress !== address)) {
                 if (normalizedAddress && normalizedAddress !== address) {
                     const fallback = await fetchBasic(normalizedAddress);
                     response = fallback.response;
                     payload = fallback.payload;
-                    property = extractProperty(payload);
+                    const fallbackContext: PropertySelectionContext = {
+                        ...selectionContext,
+                        address: normalizedAddress,
+                        normalizedAddress,
+                    };
+                    property = await selectBestProperty(extractProperties(payload), fallbackContext);
                     source = 'normalized_address';
                 }
             }
@@ -360,7 +647,7 @@ export async function POST(req: Request) {
             const geoFallback = await fetchSnapshotByGeo(Number(lat), Number(lng));
             response = geoFallback.response;
             payload = geoFallback.payload;
-            property = extractProperty(payload);
+            property = await selectBestProperty(extractProperties(payload), selectionContext);
             source = 'geo_snapshot';
         }
 
@@ -391,7 +678,10 @@ export async function POST(req: Request) {
             });
             if (detailResponse.ok) {
                 const detailPayload = await detailResponse.json();
-                const detailProperty = extractProperty(detailPayload);
+                const detailProperty = await selectBestProperty(
+                    extractProperties(detailPayload),
+                    selectionContext
+                );
                 if (detailProperty) {
                     property = {
                         ...property,
@@ -426,7 +716,10 @@ export async function POST(req: Request) {
             });
             if (expandedResponse.ok) {
                 const expandedPayload = await expandedResponse.json();
-                const expandedProperty = extractProperty(expandedPayload);
+                const expandedProperty = await selectBestProperty(
+                    extractProperties(expandedPayload),
+                    selectionContext
+                );
                 if (expandedProperty) {
                     property = {
                         ...property,
@@ -450,6 +743,58 @@ export async function POST(req: Request) {
             }
         }
 
+        const lookupAddressData = property?.address || {};
+        const lookupState = lookupAddressData?.countrySubd || lookupAddressData?.state || '';
+        const lookupCounty =
+            property?.area?.county?.name ||
+            property?.area?.countyname ||
+            property?.area?.countrySec?.name ||
+            property?.area?.countrySecondary?.name ||
+            null;
+
+        let fipsCode = extractFips(property);
+        if (!fipsCode) {
+            fipsCode = await fetchCountyFips(lookupState, lookupCounty);
+        }
+
+        const apn =
+            property?.identifier?.apn ||
+            property?.identifier?.apnOrig ||
+            property?.identifier?.parcelId ||
+            null;
+
+        if (apn && fipsCode) {
+            const parcelResponse = await fetchExpandedByParcel(String(apn).trim(), String(fipsCode).trim());
+            if (parcelResponse.response.ok) {
+                const parcelProperty = await selectBestProperty(
+                    extractProperties(parcelResponse.payload),
+                    selectionContext
+                );
+                if (parcelProperty) {
+                    property = {
+                        ...property,
+                        ...parcelProperty,
+                        address: {
+                            ...(property?.address || {}),
+                            ...(parcelProperty?.address || {}),
+                        },
+                        summary: {
+                            ...(property?.summary || {}),
+                            ...(parcelProperty?.summary || {}),
+                        },
+                        lot: {
+                            ...(property?.lot || {}),
+                            ...(parcelProperty?.lot || {}),
+                        },
+                        assessment: parcelProperty?.assessment || property?.assessment,
+                        tax: parcelProperty?.tax || property?.tax,
+                    };
+                }
+            }
+        }
+
+        fipsCode = extractFips(property) || fipsCode;
+
         const addressData = property?.address || {};
         const summary = property?.summary || {};
         const lot = property?.lot || {};
@@ -472,9 +817,12 @@ export async function POST(req: Request) {
 
         const latestAssessment = getLatestByYear(assessmentItems);
         const latestTax = getLatestByYear(taxItems);
+        const previousTax = getPreviousByYear(taxItems);
 
         const assessedValue = pickNumber(
             latestAssessment?.assessed?.value,
+            latestAssessment?.assessed?.total,
+            latestAssessment?.assessed?.valueTotal,
             latestAssessment?.assessedValue,
             latestAssessment?.totalAssessedValue,
             latestAssessment?.value,
@@ -490,6 +838,14 @@ export async function POST(req: Request) {
             latestTax?.amount,
             property?.tax?.amount?.total,
             property?.tax?.taxAmount
+        );
+
+        const previousTaxAmount = pickNumber(
+            previousTax?.tax?.amount?.total,
+            previousTax?.tax?.taxAmount,
+            previousTax?.taxAmount,
+            previousTax?.amount?.total,
+            previousTax?.amount
         );
 
         const taxYear = getYearValue(latestTax) ?? getYearValue(latestAssessment);
@@ -509,6 +865,8 @@ export async function POST(req: Request) {
         const marketValue = pickNumber(
             latestAssessment?.market?.value,
             latestAssessment?.marketValue,
+            latestAssessment?.market?.total,
+            latestAssessment?.market?.valueTotal,
             property?.assessment?.market?.value,
             property?.assessment?.marketValue,
             property?.assessment?.market?.total,
@@ -516,9 +874,11 @@ export async function POST(req: Request) {
         );
 
         const assessmentRatio =
-            assessedValue !== null && lastSalePrice !== null && lastSalePrice !== 0
-                ? Number((assessedValue / lastSalePrice).toFixed(3))
-                : null;
+            assessedValue !== null && marketValue !== null && marketValue !== 0
+                ? Number((assessedValue / marketValue).toFixed(3))
+                : assessedValue !== null && lastSalePrice !== null && lastSalePrice !== 0
+                    ? Number((assessedValue / lastSalePrice).toFixed(3))
+                    : null;
 
         const addressLine1 = addressData?.line1 || addressData?.address1 || addressData?.street || '';
         const city = addressData?.locality || addressData?.city || '';
@@ -534,11 +894,6 @@ export async function POST(req: Request) {
             property?.area?.countrySec?.name ||
             property?.area?.countrySecondary?.name ||
             null;
-
-        let fipsCode = extractFips(property);
-        if (!fipsCode) {
-            fipsCode = await fetchCountyFips(state, county);
-        }
 
         let geoIdV4 = findGeoIdV4(payload) ?? findGeoIdV4(property);
         let community: any = null;
@@ -612,17 +967,8 @@ export async function POST(req: Request) {
             communityDemo?.housing_Median_Rent,
             communityDemo?.housing_Median_Rent
         );
-        const communityViolentCrime = avgNumbers(
-            pickNumber(communityCrime?.murder_Index),
-            pickNumber(communityCrime?.forcible_Rape_Index),
-            pickNumber(communityCrime?.forcible_Robbery_Index),
-            pickNumber(communityCrime?.aggravated_Assault_Index)
-        );
-        const communityPropertyCrime = avgNumbers(
-            pickNumber(communityCrime?.burglary_Index),
-            pickNumber(communityCrime?.larceny_Index),
-            pickNumber(communityCrime?.motor_Vehicle_Theft_Index)
-        );
+        const communityViolentCrime = pickNumber(communityCrime?.aggravated_Assault_Index);
+        const communityPropertyCrime = pickNumber(communityCrime?.motor_Vehicle_Theft_Index);
 
         const attomPopulation = pickNumber(
             property?.demographics?.population,
@@ -721,6 +1067,13 @@ export async function POST(req: Request) {
         let violentCrime = attomViolentCrime;
         let propertyCrime = attomPropertyCrime;
         let twoBrRent = attomTwoBrRent;
+        const useCommunityViolentCrime = communityViolentCrime !== null;
+        const useCommunityPropertyCrime = communityPropertyCrime !== null;
+        if (useCommunityViolentCrime) violentCrime = communityViolentCrime;
+        if (useCommunityPropertyCrime) propertyCrime = communityPropertyCrime;
+        if ((useCommunityViolentCrime || useCommunityPropertyCrime) && demographicsSource === 'ATTOM') {
+            demographicsSource = 'ATTOM Community';
+        }
 
         const needsCensus =
             !population || population === 0 ||
@@ -825,6 +1178,12 @@ export async function POST(req: Request) {
             : unitsPer100 < 30
                 ? 'Critical Shortage'
                 : 'Stable';
+        let treasury10Year: { date: string | null; rate: number } | null = null;
+        try {
+            treasury10Year = await fetchTreasury10YearYield();
+        } catch (error) {
+            console.warn('Treasury 10Y fetch failed:', error);
+        }
 
         return NextResponse.json({
             property_identity: {
@@ -854,11 +1213,14 @@ export async function POST(req: Request) {
                 market_value: marketValue,
                 assessed_value: assessedValue,
                 tax_amount: taxAmount,
+                tax_prev_year_amount: previousTaxAmount ?? null,
                 tax_year: taxYear,
                 millage_rate: millageRate,
                 assessment_ratio: assessmentRatio,
                 last_sale_date: sale?.saleDate || sale?.date || null,
                 last_sale_price: lastSalePrice,
+                us_10_year_treasury: treasury10Year?.rate ?? null,
+                us_10_year_treasury_date: treasury10Year?.date ?? null,
             },
             demographics_economics: {
                 source: demographicsSource,

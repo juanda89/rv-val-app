@@ -20,8 +20,8 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
         tax_millage_rate: initialData?.tax_millage_rate || '',
         tax_prev_year_amount: initialData?.tax_prev_year_amount || '',
         fair_market_value: initialData?.fair_market_value || '',
-        assessed_value: initialData?.assessed_value || '',
-        previous_year_re_taxes: initialData?.previous_year_re_taxes || '',
+        assessed_value: initialData?.assessed_value ?? initialData?.tax_assessed_value ?? '',
+        previous_year_re_taxes: initialData?.previous_year_re_taxes ?? initialData?.tax_prev_year_amount ?? '',
         us_10_year_treasury: initialData?.us_10_year_treasury || '',
         spread: initialData?.spread || '',
         spread_escalation_allowance: initialData?.spread_escalation_allowance || '',
@@ -53,8 +53,8 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
             tax_millage_rate: initialData?.tax_millage_rate || '',
             tax_prev_year_amount: initialData?.tax_prev_year_amount || '',
             fair_market_value: initialData?.fair_market_value || '',
-            assessed_value: initialData?.assessed_value || '',
-            previous_year_re_taxes: initialData?.previous_year_re_taxes || '',
+            assessed_value: initialData?.assessed_value ?? initialData?.tax_assessed_value ?? '',
+            previous_year_re_taxes: initialData?.previous_year_re_taxes ?? initialData?.tax_prev_year_amount ?? '',
             us_10_year_treasury: initialData?.us_10_year_treasury || '',
             spread: initialData?.spread || '',
             spread_escalation_allowance: initialData?.spread_escalation_allowance || '',
@@ -136,17 +136,22 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
 
             const financials = json?.financials || {};
 
-            setData((prev) => ({
-                ...prev,
-                tax_assessed_value: financials.assessed_value ?? prev.tax_assessed_value,
-                tax_year: financials.tax_year ?? prev.tax_year,
-                tax_prev_year_amount: financials.tax_amount ?? prev.tax_prev_year_amount,
-                tax_millage_rate: financials.millage_rate ?? prev.tax_millage_rate,
-                tax_assessment_rate: financials.assessment_ratio ?? prev.tax_assessment_rate,
-                fair_market_value: financials.market_value ?? prev.fair_market_value,
-                assessed_value: financials.assessed_value ?? prev.assessed_value,
-                previous_year_re_taxes: financials.tax_amount ?? prev.previous_year_re_taxes,
-            }));
+            setData((prev) => {
+                const assessedValue = financials.assessed_value ?? prev.tax_assessed_value ?? prev.assessed_value;
+                const previousTaxAmount = financials.tax_prev_year_amount ?? financials.tax_amount ?? prev.tax_prev_year_amount;
+                return {
+                    ...prev,
+                    tax_assessed_value: assessedValue ?? prev.tax_assessed_value,
+                    tax_year: financials.tax_year ?? prev.tax_year,
+                    tax_prev_year_amount: previousTaxAmount ?? prev.tax_prev_year_amount,
+                    tax_millage_rate: financials.millage_rate ?? prev.tax_millage_rate,
+                    tax_assessment_rate: financials.assessment_ratio ?? prev.tax_assessment_rate,
+                    fair_market_value: financials.market_value ?? prev.fair_market_value,
+                    assessed_value: assessedValue ?? prev.assessed_value,
+                    previous_year_re_taxes: previousTaxAmount ?? prev.previous_year_re_taxes,
+                    us_10_year_treasury: financials.us_10_year_treasury ?? prev.us_10_year_treasury,
+                };
+            });
         } catch (err: any) {
             console.error(err);
             setError(err.message || 'ATTOM request failed');
@@ -156,7 +161,16 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
     };
 
     const handleChange = (field: string, val: string) => {
-        setData(prev => ({ ...prev, [field]: val }));
+        setData((prev) => {
+            const next = { ...prev, [field]: val };
+            if (field === 'tax_assessed_value') {
+                next.assessed_value = val;
+            }
+            if (field === 'tax_prev_year_amount') {
+                next.previous_year_re_taxes = val;
+            }
+            return next;
+        });
     };
 
     return (
@@ -279,32 +293,6 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         <Input
                             value={data.fair_market_value}
                             onChange={e => handleChange('fair_market_value', e.target.value)}
-                            className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
-                        />
-                    </div>
-                    <div>
-                        <DiscrepancyLabel
-                            label="Assessed Value"
-                            fieldKey="assessed_value"
-                            currentValue={data.assessed_value}
-                            pdfValues={pdfValues}
-                        />
-                        <Input
-                            value={data.assessed_value}
-                            onChange={e => handleChange('assessed_value', e.target.value)}
-                            className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
-                        />
-                    </div>
-                    <div>
-                        <DiscrepancyLabel
-                            label="Previous Year RE Taxes"
-                            fieldKey="previous_year_re_taxes"
-                            currentValue={data.previous_year_re_taxes}
-                            pdfValues={pdfValues}
-                        />
-                        <Input
-                            value={data.previous_year_re_taxes}
-                            onChange={e => handleChange('previous_year_re_taxes', e.target.value)}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
                     </div>
