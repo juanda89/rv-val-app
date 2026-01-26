@@ -22,6 +22,20 @@ const buildValueMap = (keys: string[], ranges: any[]) => {
     return data;
 };
 
+const buildLabelMap = (rows: any[] = []) => {
+    const labels: Record<string, any> = {};
+    rows.forEach((row) => {
+        const rawLabel = String(row?.[0] ?? '').trim();
+        if (!rawLabel) return;
+        const normalized = rawLabel
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        labels[normalized] = row?.[1];
+    });
+    return labels;
+};
+
 const parseNameValueRows = (rows: any[] = []) =>
     rows
         .filter(row => row?.[0])
@@ -58,6 +72,7 @@ export default async function ShareReportPage({ params }: Params) {
     const outputKeys = Object.keys(SHEET_MAPPING.outputs).filter(key => key !== 'sheetName');
     const inputRanges = inputKeys.map(key => `'${SHEET_NAMES.INPUT}'!${SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs]}`);
     const outputRanges = outputKeys.map(key => `'${SHEET_NAMES.OUTPUT}'!${SHEET_MAPPING.outputs[key as keyof typeof SHEET_MAPPING.outputs]}`);
+    const outputLabelRange = `'${SHEET_NAMES.OUTPUT}'!B2:C300`;
 
     const { data: inputData } = await sheets.spreadsheets.values.batchGet({
         spreadsheetId,
@@ -66,7 +81,7 @@ export default async function ShareReportPage({ params }: Params) {
 
     const { data: outputData } = await sheets.spreadsheets.values.batchGet({
         spreadsheetId,
-        ranges: outputRanges,
+        ranges: [...outputRanges, outputLabelRange],
     });
 
     const { data: pnlData } = await sheets.spreadsheets.values.batchGet({
@@ -80,7 +95,10 @@ export default async function ShareReportPage({ params }: Params) {
     });
 
     const inputs = buildValueMap(inputKeys, inputData.valueRanges || []);
-    const outputs = buildValueMap(outputKeys, outputData.valueRanges || []);
+    const outputRangesData = outputData.valueRanges || [];
+    const outputs = buildValueMap(outputKeys, outputRangesData.slice(0, outputKeys.length));
+    const labelRows = outputRangesData[outputKeys.length]?.values || [];
+    outputs.__labels = buildLabelMap(labelRows);
     const ranges = pnlData.valueRanges || [];
     const incomeRows = ranges[0]?.values || [];
     const expenseRows = ranges[1]?.values || [];

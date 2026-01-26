@@ -563,7 +563,7 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Original Income</h3>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Historial Income</h3>
                     <div className="flex gap-2">
                         <input
                             value={incomeName}
@@ -625,7 +625,7 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
                 </div>
 
                 <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Original Expenses</h3>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Historial Expenses</h3>
                     <div className="flex gap-2">
                         <input
                             value={expenseName}

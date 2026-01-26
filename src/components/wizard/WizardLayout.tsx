@@ -4,6 +4,7 @@ import React, { useRef, useState } from 'react';
 import { Step1Location } from './Step1Location';
 import { Step2RentRoll } from './Step2RentRoll';
 import { Step3PnL } from './Step3PnL';
+import { Step4Acquisition } from './Step4Acquisition';
 import { Step4Taxes } from './Step4Taxes';
 import { Button } from "@/components/ui/Button";
 import { useSheetSync } from '@/hooks/useSheetSync';
@@ -21,8 +22,9 @@ const STEPS = [
     { id: 1, title: 'Property Basics', icon: 'domain' },
     { id: 2, title: 'Rent Roll', icon: 'list_alt' },
     { id: 3, title: 'P&L Upload', icon: 'upload_file' },
-    { id: 4, title: 'Taxes', icon: 'account_balance' },
-    { id: 5, title: 'Results', icon: 'analytics' },
+    { id: 4, title: 'Acquisition', icon: 'assignment' },
+    { id: 5, title: 'Taxes', icon: 'account_balance' },
+    { id: 6, title: 'Results', icon: 'analytics' },
 ];
 
 export const WizardLayout = ({
@@ -43,6 +45,7 @@ export const WizardLayout = ({
     const [projectId, setProjectId] = useState<string | null>(initialProjectId || null);
     const [creatingProject, setCreatingProject] = useState(false);
     const [nextSyncing, setNextSyncing] = useState(false);
+    const [refreshingOutputs, setRefreshingOutputs] = useState(false);
     const { sync, isSyncing } = useSheetSync(projectId || '');
     const pendingSyncRef = useRef<Record<string, any>>({});
     const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,7 +116,11 @@ export const WizardLayout = ({
 
     React.useEffect(() => {
         if (initialData) {
-            setFormData((prev: any) => ({ ...prev, ...initialData }));
+            const { outputs: initialOutputs, ...rest } = initialData;
+            setFormData((prev: any) => ({ ...prev, ...rest }));
+            if (initialOutputs) {
+                setOutputs(initialOutputs);
+            }
         }
     }, [initialData]);
 
@@ -250,34 +257,105 @@ export const WizardLayout = ({
         const mapping: Record<number, string[]> = {
             1: [
                 'name',
+                'mobile_home_park_name',
                 'city',
+                'state',
                 'county',
+                'zip_code',
                 'address',
+                'mobile_home_park_address',
                 'parcelNumber',
+                'parcel_1',
                 'population_1mile',
                 'median_income',
                 'acreage',
+                'parcel_1_acreage',
                 'year_built',
                 'property_type',
                 'last_sale_price',
+                'population',
+                'population_change',
+                'poverty_rate',
+                'median_household_income',
+                'median_household_income_change',
+                'number_of_employees',
+                'number_of_employees_change',
+                'median_property_value',
+                'median_property_value_change',
+                'violent_crime',
+                'property_crime',
+                'two_br_rent',
+                'eli_renter_households',
+                'units_per_100',
+                'total_units',
             ],
             2: [
                 'total_lots',
                 'occupied_lots',
                 'current_lot_rent',
+                'base_capx',
+                'capx_mgmt_fees',
+                'absorption_lease_up_period',
+                'terminal_occupancy',
+                'rent_bump_y1',
+                'rent_bump_y2_5',
+                'loss_to_lease',
             ],
             4: [
+                'appraisal',
+                'ppa',
+                'pca',
+                'esa_phase_1',
+                'pza',
+                'survey',
+                'camera_sewer_electrical_inspection',
+                'water_leak_detection',
+                'buyer_legal',
+                'lender_legal',
+                'title_and_closing',
+                'loan_origination',
+                'travel',
+                'contingency',
+                'rate_buy_down',
+                'buyer_paid_broker_commission',
+                'acquisition_fee',
+                'cost_of_sale',
+                'credit_loss',
+                'annual_inflation',
+                'management_fee',
+                'monthly_min_management_fee',
+                'full_whammy_tax_bump',
+                'year_1_tax_increase',
+                'property_manager_salary',
+                'assistant_property_manager_salary',
+                'maintenance_man_salary',
+                'number_of_pms',
+                'number_of_apms',
+                'number_of_mms',
+                'rm_per_lot',
+            ],
+            5: [
                 'tax_assessed_value',
                 'tax_year',
                 'tax_assessment_rate',
                 'tax_millage_rate',
                 'tax_prev_year_amount',
-            ],
-            5: [
-                'annual_rent_growth',
-                'expense_inflation',
-                'exit_cap_rate',
-                'occupancy_target',
+                'fair_market_value',
+                'assessed_value',
+                'previous_year_re_taxes',
+                'us_10_year_treasury',
+                'spread',
+                'spread_escalation_allowance',
+                'dscr',
+                'max_ltc',
+                'loan_term',
+                'interest_only_time_period',
+                'cap_rate_decompression',
+                'real_estate_valuation',
+                'preferred_return',
+                'lp_split',
+                'gp_split',
+                'hold_period',
             ],
         };
 
@@ -295,8 +373,24 @@ export const WizardLayout = ({
         if (!extracted || Object.keys(extracted).length === 0) return;
 
         const updates: Record<string, any> = {};
+        const pdfValues: Record<string, any> = {};
         const incomeFromUpload: Array<{ id: string; name: string; amount: number }> = [];
         const expenseFromUpload: Array<{ id: string; name: string; amount: number }> = [];
+        const skipAutoFields = new Set([
+            'city',
+            'state',
+            'county',
+            'zip_code',
+            'parcel_1',
+            'parcelNumber',
+            'parcel_1_acreage',
+            'acreage',
+            'property_type',
+            'year_built',
+            'last_sale_price',
+            'lat',
+            'lng',
+        ]);
         Object.entries(extracted).forEach(([key, value]) => {
             if (key.startsWith('revenue_')) {
                 const amount = parseAmount(value);
@@ -312,8 +406,32 @@ export const WizardLayout = ({
                 }
                 return;
             }
-            updates[key] = value;
+            pdfValues[key] = value;
+            if (!skipAutoFields.has(key)) {
+                updates[key] = value;
+            }
         });
+        if (pdfValues.parcelNumber && !pdfValues.parcel_1) {
+            pdfValues.parcel_1 = pdfValues.parcelNumber;
+        }
+        if (pdfValues.parcel_1 && !pdfValues.parcelNumber) {
+            pdfValues.parcelNumber = pdfValues.parcel_1;
+        }
+        if (pdfValues.acreage && !pdfValues.parcel_1_acreage) {
+            pdfValues.parcel_1_acreage = pdfValues.acreage;
+        }
+        if (pdfValues.address && !pdfValues.mobile_home_park_address) {
+            pdfValues.mobile_home_park_address = pdfValues.address;
+        }
+        if (pdfValues.mobile_home_park_address && !pdfValues.address) {
+            pdfValues.address = pdfValues.mobile_home_park_address;
+        }
+        if (pdfValues.name && !pdfValues.mobile_home_park_name) {
+            pdfValues.mobile_home_park_name = pdfValues.name;
+        }
+        if (pdfValues.zip && !pdfValues.zip_code) {
+            pdfValues.zip_code = pdfValues.zip;
+        }
 
         setFormData((prev: any) => {
             const next = { ...prev };
@@ -324,6 +442,9 @@ export const WizardLayout = ({
                     delete updates[key];
                 }
             });
+            if (Object.keys(pdfValues).length > 0) {
+                next.pdf_values = { ...(prev?.pdf_values || {}), ...pdfValues };
+            }
 
             if (incomeFromUpload.length > 0) {
                 const existingIncome = Array.isArray(next.pnl_income_items)
@@ -366,10 +487,48 @@ export const WizardLayout = ({
             return next;
         });
 
-        if (projectId && Object.keys(updates).length > 0) {
-            await sync(updates);
+        if (projectId && (Object.keys(updates).length > 0 || Object.keys(pdfValues).length > 0)) {
+            const payload: Record<string, any> = { ...updates };
+            if (Object.keys(pdfValues).length > 0) {
+                payload.__pdf_values = pdfValues;
+            }
+            await sync(payload);
         }
     }, [projectId, sync]);
+
+    const refreshOutputs = React.useCallback(async () => {
+        if (!projectId) return;
+        setRefreshingOutputs(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            const response = await fetch('/api/sheet/load', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
+                },
+                body: JSON.stringify({ projectId }),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload?.error || 'Failed to load outputs');
+            }
+            if (payload?.outputs) {
+                setOutputs(payload.outputs);
+            }
+        } catch (error) {
+            console.error('Output refresh failed:', error);
+        } finally {
+            setRefreshingOutputs(false);
+        }
+    }, [projectId]);
+
+    React.useEffect(() => {
+        if (currentStep === 6 && projectId) {
+            void refreshOutputs();
+        }
+    }, [currentStep, projectId, refreshOutputs]);
 
 
     const handleStep1Complete = async (data: any) => {
@@ -488,7 +647,7 @@ export const WizardLayout = ({
             </div>
 
             <div className="flex-1 flex flex-col lg:flex-row">
-                {currentStep !== 5 && <ValuationUploadPanel onAutofill={handleAutofill} />}
+                {currentStep !== 6 && <ValuationUploadPanel onAutofill={handleAutofill} />}
 
                 {/* Main Content */}
                 <div className="flex-1 flex flex-col">
@@ -503,7 +662,7 @@ export const WizardLayout = ({
                             ) : (
                                 <Button variant="ghost" className="text-slate-500 dark:text-gray-400" onClick={prevStep} disabled={currentStep === 1}>Back</Button>
                             )}
-                            {currentStep < 5 && (
+                            {currentStep < 6 && (
                                 <Button
                                     onClick={nextStep}
                                     disabled={
@@ -523,9 +682,19 @@ export const WizardLayout = ({
                     <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
                         {currentStep === 1 && <Step1Location onDataChange={handleDataChange} initialData={formData} />}
                         {currentStep === 2 && <Step2RentRoll onDataChange={handleDataChange} initialData={formData} />}
-                    {currentStep === 3 && <Step3PnL onDataChange={handleDataChange} initialData={formData} projectId={projectId} />}
-                        {currentStep === 4 && <Step4Taxes onDataChange={handleDataChange} initialData={formData} address={formData.address} />}
-                        {currentStep === 5 && <Dashboard outputs={outputs} inputs={formData} onInputChange={handleDataChange} shareId={formData?.spreadsheet_id} />}
+                        {currentStep === 3 && <Step3PnL onDataChange={handleDataChange} initialData={formData} projectId={projectId} />}
+                        {currentStep === 4 && <Step4Acquisition onDataChange={handleDataChange} initialData={formData} />}
+                        {currentStep === 5 && <Step4Taxes onDataChange={handleDataChange} initialData={formData} address={formData.address} />}
+                        {currentStep === 6 && (
+                            <Dashboard
+                                outputs={outputs}
+                                inputs={formData}
+                                onInputChange={handleDataChange}
+                                shareId={formData?.spreadsheet_id}
+                                onRefreshOutputs={refreshOutputs}
+                                refreshingOutputs={refreshingOutputs}
+                            />
+                        )}
                     </main>
                 </div>
             </div>

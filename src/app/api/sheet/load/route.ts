@@ -32,6 +32,25 @@ const buildGroupedItems = (rows?: any[][] | null) =>
         total: toNumber(row.value) ?? 0,
     }));
 
+const buildLabelMap = (rows: any[] = []) => {
+    const labels: Record<string, any> = {};
+    rows.forEach((row) => {
+        const rawLabel = String(row?.[0] ?? '').trim();
+        if (!rawLabel) return;
+        const normalized = rawLabel
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        labels[normalized] = row?.[1];
+    });
+    return labels;
+};
+
+const getRowFromCell = (cell: string) => {
+    const match = cell.match(/\d+$/);
+    return match ? Number(match[0]) : 0;
+};
+
 export async function POST(req: Request) {
     try {
         const { projectId } = await req.json();
@@ -69,6 +88,18 @@ export async function POST(req: Request) {
             const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
             return `'${SHEET_MAPPING.inputs.sheetName}'!${cell}`;
         });
+        const inputPdfRanges = inputKeys.map((key) => {
+            const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
+            const row = getRowFromCell(cell);
+            return `'${SHEET_MAPPING.inputs.sheetName}'!D${row}`;
+        });
+
+        const outputKeys = Object.keys(SHEET_MAPPING.outputs).filter(k => k !== 'sheetName');
+        const outputRanges = outputKeys.map((key) => {
+            const cell = SHEET_MAPPING.outputs[key as keyof typeof SHEET_MAPPING.outputs];
+            return `'${SHEET_MAPPING.outputs.sheetName}'!${cell}`;
+        });
+        const outputLabelRange = `'${SHEET_MAPPING.outputs.sheetName}'!B2:C300`;
 
         const pnlRanges = [
             `'${SHEET_NAMES.CATEGORIZATION}'!B4:C1000`,
@@ -77,10 +108,14 @@ export async function POST(req: Request) {
             `'${SHEET_NAMES.CATEGORIZATION}'!K4:L1000`,
         ];
 
-        const [inputsResponse, pnlResponse] = await Promise.all([
+        const [inputsResponse, outputResponse, pnlResponse] = await Promise.all([
             sheets.spreadsheets.values.batchGet({
                 spreadsheetId,
-                ranges: inputRanges,
+                ranges: [...inputRanges, ...inputPdfRanges],
+            }),
+            sheets.spreadsheets.values.batchGet({
+                spreadsheetId,
+                ranges: [...outputRanges, outputLabelRange],
             }),
             sheets.spreadsheets.values.batchGet({
                 spreadsheetId,
@@ -89,7 +124,8 @@ export async function POST(req: Request) {
         ]);
 
         const inputs: Record<string, any> = {};
-        inputsResponse.data.valueRanges?.forEach((range, index) => {
+        const inputRangesData = inputsResponse.data.valueRanges || [];
+        inputRangesData.slice(0, inputKeys.length).forEach((range, index) => {
             const key = inputKeys[index];
             const value = range.values?.[0]?.[0];
             if (value !== undefined && value !== null && value !== '') {
@@ -97,14 +133,43 @@ export async function POST(req: Request) {
             }
         });
 
+        const pdfValues: Record<string, any> = {};
+        inputRangesData.slice(inputKeys.length).forEach((range, index) => {
+            const key = inputKeys[index];
+            const value = range.values?.[0]?.[0];
+            if (value !== undefined && value !== null && value !== '') {
+                pdfValues[key] = value;
+            }
+        });
+
+        if (Object.keys(pdfValues).length > 0) {
+            inputs.pdf_values = pdfValues;
+        }
+
         const pnlRangesData = pnlResponse.data.valueRanges || [];
         const incomeItems = buildItems(pnlRangesData[0]?.values);
         const expenseItems = buildItems(pnlRangesData[1]?.values);
         const groupedIncome = buildGroupedItems(pnlRangesData[2]?.values);
         const groupedExpenses = buildGroupedItems(pnlRangesData[3]?.values);
 
+        const outputRangesData = outputResponse.data.valueRanges || [];
+        const labelRows = outputRangesData[outputKeys.length]?.values || [];
+        const labelMap = buildLabelMap(labelRows);
+        const outputs: Record<string, any> = { ...labelMap };
+
+        outputRangesData.slice(0, outputKeys.length).forEach((range, index) => {
+            const key = outputKeys[index];
+            const value = range.values?.[0]?.[0];
+            if (value !== undefined && value !== null && value !== '' && outputs[key] === undefined) {
+                outputs[key] = value;
+            }
+        });
+
+        outputs.__labels = labelMap;
+
         return NextResponse.json({
             inputs,
+            outputs,
             pnl: {
                 incomeItems,
                 expenseItems,

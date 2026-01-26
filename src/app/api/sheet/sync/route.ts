@@ -37,17 +37,6 @@ export async function POST(req: Request) {
         const updates = [];
         const inputSheetName = SHEET_MAPPING.inputs.sheetName;
 
-        const extractCityFromAddress = (address: string) => {
-            const parts = address
-                .split(',')
-                .map(part => part.trim())
-                .filter(Boolean);
-
-            if (parts.length >= 3) return parts[1];
-            if (parts.length === 2) return parts[0];
-            return '';
-        };
-
         const normalizeString = (value: unknown) => {
             if (typeof value !== 'string') return '';
             return value.trim();
@@ -55,14 +44,13 @@ export async function POST(req: Request) {
 
         const projectName = normalizeString(inputs.name) || project.name || '';
         const projectAddress = normalizeString(inputs.address) || project.address || '';
-        const projectCity = normalizeString(inputs.city) || extractCityFromAddress(projectAddress);
+        const projectCity = normalizeString(inputs.city) || '';
+        const pdfValues = inputs.__pdf_values || inputs.pdf_values || {};
 
-        const mergedInputs = {
-            ...inputs,
-            name: projectName,
-            city: projectCity,
-            address: projectAddress,
-        };
+        const mergedInputs: Record<string, any> = { ...inputs };
+        if (projectName) mergedInputs.name = projectName;
+        if (projectAddress) mergedInputs.address = projectAddress;
+        if (projectCity) mergedInputs.city = projectCity;
 
         const getRowFromCell = (cell: string) => {
             const match = cell.match(/\d+$/);
@@ -93,17 +81,22 @@ export async function POST(req: Request) {
             }
         }
 
+        if (pdfValues && typeof pdfValues === 'object') {
+            for (const [key, value] of Object.entries(pdfValues)) {
+                const mappingKey = key as keyof typeof SHEET_MAPPING.inputs;
+                const cell = SHEET_MAPPING.inputs[mappingKey];
+                if (!cell || mappingKey === 'sheetName') continue;
+                const row = getRowFromCell(cell);
+                if (!row) continue;
+                updates.push({
+                    range: `'${inputSheetName}'!D${row}`,
+                    values: [[value]],
+                });
+            }
+        }
+
         const outputSheetName = SHEET_MAPPING.outputs.sheetName;
         const outputKeys = Object.keys(SHEET_MAPPING.outputs).filter(k => k !== 'sheetName');
-        outputKeys.forEach(key => {
-            const cell = SHEET_MAPPING.outputs[key as keyof typeof SHEET_MAPPING.outputs];
-            const row = getRowFromCell(cell);
-            if (!row) return;
-            updates.push({
-                range: `'${outputSheetName}'!B${row}`,
-                values: [[key]],
-            });
-        });
 
         if (updates.length > 0) {
             await sheets.spreadsheets.values.batchUpdate({
@@ -121,19 +114,32 @@ export async function POST(req: Request) {
             return `'${outputSheetName}'!${cell}`;
         });
 
+        const labelRange = `'${outputSheetName}'!B2:C300`;
         const response = await sheets.spreadsheets.values.batchGet({
             spreadsheetId,
-            ranges,
+            ranges: [...ranges, labelRange],
         });
 
         const results: Record<string, any> = {};
-        if (response.data.valueRanges) {
-            response.data.valueRanges.forEach((range, index) => {
-                const key = outputKeys[index];
-                const val = range.values?.[0]?.[0]; // Get the single cell value
-                results[key] = val;
-            });
-        }
+        const valueRanges = response.data.valueRanges || [];
+        valueRanges.slice(0, outputKeys.length).forEach((range, index) => {
+            const key = outputKeys[index];
+            const val = range.values?.[0]?.[0];
+            results[key] = val;
+        });
+
+        const labelValues: Record<string, any> = {};
+        const labelRows = valueRanges[outputKeys.length]?.values || [];
+        labelRows.forEach((row: any[]) => {
+            const rawLabel = String(row?.[0] ?? '').trim();
+            if (!rawLabel) return;
+            const normalized = rawLabel
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '_')
+                .replace(/^_+|_+$/g, '');
+            labelValues[normalized] = row?.[1];
+        });
+        results.__labels = labelValues;
 
         return NextResponse.json({ results });
 

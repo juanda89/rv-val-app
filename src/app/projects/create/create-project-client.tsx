@@ -78,11 +78,13 @@ export const CreateProjectClient = () => {
                     const sheetPayload = await fetchSheetData(data.id);
                     const inputs = sheetPayload?.inputs || {};
                     const pnl = sheetPayload?.pnl || {};
+                    const outputs = sheetPayload?.outputs || {};
 
                     setProjectData({
                         name: data.name,
                         address: data.address,
                         spreadsheet_id: data.spreadsheet_id,
+                        outputs,
                         ...inputs,
                         pnl_income_items: pnl.incomeItems || [],
                         pnl_expense_items: pnl.expenseItems || [],
