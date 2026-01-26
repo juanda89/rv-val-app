@@ -320,7 +320,7 @@ const PnlComparisonTable = ({
             <div className="px-5 py-4 border-b border-slate-200 dark:border-white/5 flex flex-wrap gap-3 items-center justify-between">
                 <div>
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
-                    <p className="text-xs text-slate-500 dark:text-[#92a4c9]">Historical vs categorized income & expenses</p>
+                    <p className="text-xs text-slate-500 dark:text-[#92a4c9]">Est. T12 vs RR/RE income & expenses</p>
                 </div>
                 {lotCount ? (
                     <span className="text-xs font-semibold text-slate-600 dark:text-[#92a4c9]">
@@ -333,14 +333,15 @@ const PnlComparisonTable = ({
                     <thead className="bg-slate-50 dark:bg-[#1a2434] text-slate-500 dark:text-[#92a4c9] uppercase text-[11px]">
                         <tr>
                             <th className="px-5 py-3 text-left font-semibold">Category</th>
-                            <th className="px-5 py-3 text-right font-semibold">Historical</th>
-                            <th className="px-5 py-3 text-right font-semibold">Categorized</th>
-                            <th className="px-5 py-3 text-right font-semibold">Per Lot</th>
+                            <th className="px-5 py-3 text-right font-semibold">Est. T12</th>
+                            <th className="px-5 py-3 text-right font-semibold">RR</th>
+                            <th className="px-5 py-3 text-right font-semibold">RE</th>
+                            <th className="px-5 py-3 text-right font-semibold">Per lot</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-white/5 text-slate-700 dark:text-slate-200">
                         <tr className="bg-slate-100/70 dark:bg-[#182132] text-slate-600 dark:text-[#92a4c9] font-semibold">
-                            <td className="px-5 py-2" colSpan={4}>
+                            <td className="px-5 py-2" colSpan={5}>
                                 Income
                             </td>
                         </tr>
@@ -352,6 +353,9 @@ const PnlComparisonTable = ({
                                 </td>
                                 <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
                                     {formatCurrency(row.grouped)}
+                                </td>
+                                <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
+                                    -
                                 </td>
                                 <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
                                     {formatLot(row.grouped)}
@@ -367,11 +371,14 @@ const PnlComparisonTable = ({
                                 {formatCurrency(totals.incomeGrouped)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
+                                -
+                            </td>
+                            <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
                                 {formatLot(totals.incomeGrouped)}
                             </td>
                         </tr>
                         <tr className="bg-slate-100/70 dark:bg-[#182132] text-slate-600 dark:text-[#92a4c9] font-semibold">
-                            <td className="px-5 py-2" colSpan={4}>
+                            <td className="px-5 py-2" colSpan={5}>
                                 Expenses
                             </td>
                         </tr>
@@ -380,6 +387,9 @@ const PnlComparisonTable = ({
                                 <td className="px-5 py-3 text-slate-600 dark:text-[#c8d3ea]">{row.label}</td>
                                 <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
                                     {formatCurrency(row.historical)}
+                                </td>
+                                <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
+                                    -
                                 </td>
                                 <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
                                     {formatCurrency(row.grouped)}
@@ -395,6 +405,9 @@ const PnlComparisonTable = ({
                                 {formatCurrency(totals.expenseHistorical)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
+                                -
+                            </td>
+                            <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
                                 {formatCurrency(totals.expenseGrouped)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
@@ -408,6 +421,9 @@ const PnlComparisonTable = ({
                             </td>
                             <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
                                 {formatCurrency(totals.noiGrouped)}
+                            </td>
+                            <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
+                                -
                             </td>
                             <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
                                 {formatLot(totals.noiGrouped)}
