@@ -658,7 +658,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         pdfValues={pdfValues}
                     />
                     <div className="relative">
-                        <span className="absolute left-3 top-2 text-slate-400">$</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                         <Input
                             type="number"
                             value={initialData?.last_sale_price ?? ''}
@@ -719,7 +719,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                                 onChange={(e) => onDataChange({ population_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                     <div>
@@ -736,7 +736,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                                 onChange={(e) => onDataChange({ poverty_rate: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                     <div>
@@ -747,7 +747,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
-                            <span className="absolute left-3 top-2 text-slate-400">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                             <Input
                                 type="number"
                                 value={initialData?.median_household_income ?? ''}
@@ -770,7 +770,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                                 onChange={(e) => onDataChange({ median_household_income_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                     <div>
@@ -801,7 +801,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                                 onChange={(e) => onDataChange({ number_of_employees_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                     <div>
@@ -812,7 +812,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
-                            <span className="absolute left-3 top-2 text-slate-400">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                             <Input
                                 type="number"
                                 value={initialData?.median_property_value ?? ''}
@@ -835,7 +835,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                                 onChange={(e) => onDataChange({ median_property_value_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                     <div>
@@ -872,7 +872,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
-                            <span className="absolute left-3 top-2 text-slate-400">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                             <Input
                                 type="number"
                                 value={initialData?.two_br_rent ?? ''}
@@ -1337,7 +1337,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
-                            <span className="absolute left-3 top-2 text-slate-400">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                             <Input
                                 type="number"
                                 value={initialData?.last_sale_price ?? ''}
@@ -1380,7 +1380,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                                 onChange={(e) => onDataChange({ population_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                     <div>
@@ -1397,7 +1397,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                                 onChange={(e) => onDataChange({ poverty_rate: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                     <div>
@@ -1408,7 +1408,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
-                            <span className="absolute left-3 top-2 text-slate-400">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                             <Input
                                 type="number"
                                 value={initialData?.median_household_income ?? ''}
@@ -1431,7 +1431,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                                 onChange={(e) => onDataChange({ median_household_income_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                         <div>
@@ -1462,7 +1462,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                                 onChange={(e) => onDataChange({ number_of_employees_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                     <div>
@@ -1473,7 +1473,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
-                            <span className="absolute left-3 top-2 text-slate-400">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                             <Input
                                 type="number"
                                 value={initialData?.median_property_value ?? ''}
@@ -1496,7 +1496,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                                 onChange={(e) => onDataChange({ median_property_value_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
-                            <span className="absolute right-3 top-2 text-slate-400">%</span>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">%</span>
                         </div>
                     </div>
                         <div>
@@ -1533,7 +1533,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
-                            <span className="absolute left-3 top-2 text-slate-400">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                             <Input
                                 type="number"
                                 value={initialData?.two_br_rent ?? ''}

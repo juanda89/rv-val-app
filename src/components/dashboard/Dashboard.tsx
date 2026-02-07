@@ -196,6 +196,14 @@ const DualAxisLineChart = ({
             })
             .join(' ');
 
+    const avgSeriesValue = (series: SeriesPoint[]) => {
+        const values = series
+            .map((point) => point.value)
+            .filter((value): value is number => value !== null && value !== undefined);
+        if (!values.length) return null;
+        return values.reduce((sum, value) => sum + value, 0) / values.length;
+    };
+
     const leftPath = buildPoints(leftSeries);
     const rightPath = buildPoints(rightSeries);
     const buildArea = (series: SeriesPoint[]) => {
@@ -209,70 +217,42 @@ const DualAxisLineChart = ({
     return (
         <div className="rounded-xl bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 p-5 shadow-sm">
             <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
-                <span className="text-[11px] text-slate-400 dark:text-[#92a4c9]">Year 1-5</span>
+                <div>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
+                    <p className="text-[11px] text-slate-400 dark:text-[#92a4c9]">Year 1-5 snapshot</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-[#92a4c9]">
+                    <span className="inline-flex items-center gap-2 rounded-full bg-purple-50 dark:bg-purple-500/10 px-2.5 py-1 text-purple-600 dark:text-purple-300 font-semibold">
+                        <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                        {leftLabel}
+                        <span className="text-purple-700/80 dark:text-purple-200/80 font-semibold">
+                            {formatValue(avgSeriesValue(leftSeries), 'percent')}
+                        </span>
+                    </span>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-sky-50 dark:bg-sky-500/10 px-2.5 py-1 text-sky-600 dark:text-sky-300 font-semibold">
+                        <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                        {rightLabel}
+                        <span className="text-sky-700/80 dark:text-sky-200/80 font-semibold">
+                            {formatValue(avgSeriesValue(rightSeries), 'percent')}
+                        </span>
+                    </span>
+                </div>
             </div>
-            <div className="mt-4">
-                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-44">
-                    <defs>
-                        <linearGradient id="occupancyFill" x1="0" x2="0" y1="0" y2="1">
-                            <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.35" />
-                            <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0" />
-                        </linearGradient>
-                        <linearGradient id="roeFill" x1="0" x2="0" y1="0" y2="1">
-                            <stop offset="0%" stopColor="#a855f7" stopOpacity="0.3" />
-                            <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
-                        </linearGradient>
-                    </defs>
-                    {Array.from({ length: 4 }).map((_, idx) => {
-                        const y = padding + ((height - padding * 2) / 3) * idx;
-                        return (
-                            <line key={idx} x1={padding} y1={y} x2={width - padding} y2={y} stroke="#e2e8f0" strokeWidth="1" />
-                        );
-                    })}
-                    <path d={buildArea(leftSeries)} fill="url(#occupancyFill)" />
-                    <path d={buildArea(rightSeries)} fill="url(#roeFill)" />
-                    <polyline points={leftPath} fill="none" stroke="#0ea5e9" strokeWidth="2" />
-                    <polyline points={rightPath} fill="none" stroke="#a855f7" strokeWidth="2" />
-                    {leftSeries.map((point, index) => {
-                        const x = padding + (index / Math.max(leftSeries.length - 1, 1)) * (width - padding * 2);
-                        const y = padding + (1 - point.normalized) * (height - padding * 2);
-                        return <circle key={`left-${point.label}`} cx={x} cy={y} r={3} fill="#0ea5e9" />;
-                    })}
-                    {rightSeries.map((point, index) => {
-                        const x = padding + (index / Math.max(rightSeries.length - 1, 1)) * (width - padding * 2);
-                        const y = padding + (1 - point.normalized) * (height - padding * 2);
-                        return <circle key={`right-${point.label}`} cx={x} cy={y} r={3} fill="#a855f7" />;
-                    })}
-                    <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#e2e8f0" strokeWidth="1" />
-                    <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#e2e8f0" strokeWidth="1" />
-                    <line x1={width - padding} y1={padding} x2={width - padding} y2={height - padding} stroke="#e2e8f0" strokeWidth="1" />
-                </svg>
-                <div className="flex justify-between text-xs text-slate-500 dark:text-[#92a4c9] px-2">
+            <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-white/5">
+                <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-[#1a2434] px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-[#92a4c9]">
+                    <span>Year</span>
                     <span>{leftLabel}</span>
                     <span>{rightLabel}</span>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-6 text-xs text-slate-500 dark:text-[#92a4c9]">
-                    <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-sky-500"></span>
-                        <span>{leftLabel}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-purple-500"></span>
-                        <span>{rightLabel}</span>
-                    </div>
-                </div>
-                <div className="mt-4 text-xs text-slate-500 dark:text-[#92a4c9]">
-                    <div className="grid grid-cols-3 gap-2 font-semibold text-slate-700 dark:text-white mb-2">
-                        <span>Year</span>
-                        <span>{leftLabel}</span>
-                        <span>{rightLabel}</span>
-                    </div>
+                <div className="divide-y divide-slate-200 dark:divide-white/5 text-sm">
                     {leftSeries.map((point, index) => {
                         const rightPoint = rightSeries[index];
                         return (
-                            <div key={`line-values-${point.label}`} className="grid grid-cols-3 gap-2">
-                                <span className="text-slate-500 dark:text-[#92a4c9]">{point.label}</span>
+                            <div
+                                key={`line-values-${point.label}`}
+                                className="grid grid-cols-3 gap-2 px-4 py-2 text-slate-600 dark:text-[#c8d3ea] hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors"
+                            >
+                                <span className="font-medium">{point.label}</span>
                                 <span className="text-slate-900 dark:text-white font-semibold">
                                     {formatValue(point.value, 'percent')}
                                 </span>
@@ -447,9 +427,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
     const toNumber = (value: any) => {
         if (value === null || value === undefined || value === '') return null;
-        const cleaned = String(value).replace(/[$,%]/g, '').trim();
+        const raw = String(value).trim();
+        const isParenNegative = raw.startsWith('(') && raw.endsWith(')');
+        const cleaned = raw
+            .replace(/[()]/g, '')
+            .replace(/[$,%]/g, '')
+            .replace(/,/g, '')
+            .replace(/x/gi, '')
+            .trim();
         const n = Number(cleaned);
-        return Number.isFinite(n) ? n : null;
+        if (!Number.isFinite(n)) return null;
+        return isParenNegative ? -Math.abs(n) : n;
     };
 
     const normalizeRate = (value: any) => {
@@ -656,14 +644,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 iconClass: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
             },
             {
-                label: 'Real_Estate_Valuation',
-                displayLabel: 'Real Estate Valuation',
-                value: realEstateValuation,
-                format: 'currency' as const,
-                icon: 'account_balance',
-                iconClass: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
-            },
-            {
                 label: 'Equity @ Acq.',
                 displayLabel: 'Equity @ Acquisition',
                 value: equityAtAcq,
@@ -680,8 +660,50 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 iconClass: 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400',
             },
         ],
-        [dollarsPerLot, realEstateValuation, equityAtAcq, debtAtAcq]
+        [dollarsPerLot, equityAtAcq, debtAtAcq]
     );
+
+    const resolvedShareId = typeof shareId === 'string' && shareId.trim()
+        ? shareId.trim()
+        : typeof inputs?.spreadsheet_id === 'string' && inputs.spreadsheet_id.trim()
+            ? inputs.spreadsheet_id.trim()
+            : '';
+    const shareUrl = resolvedShareId && typeof window !== 'undefined'
+        ? `${window.location.origin}/share/${encodeURIComponent(resolvedShareId)}`
+        : null;
+
+    const realEstateInputRaw = inputs?.real_estate_valuation;
+    const [realEstateDraft, setRealEstateDraft] = useState<string>(
+        realEstateInputRaw ?? (realEstateValuation !== null && realEstateValuation !== undefined ? String(realEstateValuation) : '')
+    );
+    const [hasEditedRealEstate, setHasEditedRealEstate] = useState(false);
+    const sliderBaseRef = React.useRef<number | null>(null);
+
+    React.useEffect(() => {
+        if (realEstateInputRaw !== undefined && realEstateInputRaw !== null) {
+            setRealEstateDraft(String(realEstateInputRaw));
+        } else if (realEstateValuation !== null && realEstateValuation !== undefined) {
+            setRealEstateDraft(String(realEstateValuation));
+        }
+    }, [realEstateInputRaw, realEstateValuation]);
+
+    const baseCandidate = toNumber(realEstateInputRaw) ?? realEstateValuation ?? 0;
+    React.useEffect(() => {
+        sliderBaseRef.current = baseCandidate;
+        setHasEditedRealEstate(false);
+    }, [resolvedShareId]);
+    React.useEffect(() => {
+        if (!hasEditedRealEstate) {
+            sliderBaseRef.current = baseCandidate;
+        }
+    }, [baseCandidate, hasEditedRealEstate]);
+
+    const realEstateNumber = toNumber(realEstateDraft) ?? realEstateValuation ?? 0;
+    const sliderBase = sliderBaseRef.current ?? baseCandidate;
+    const sliderMin = sliderBase > 0 ? Math.max(0, sliderBase * 0.5) : 0;
+    const sliderMax = sliderBase > 0 ? sliderBase * 1.5 : 10000000;
+    const sliderStep = sliderBase > 0 ? Math.max(1000, Math.round(sliderBase / 100)) : 10000;
+    const sliderValue = Math.min(Math.max(realEstateNumber, sliderMin), sliderMax);
 
     const sourcesOfCash: MetricItem[] = useMemo(
         () => [
@@ -874,7 +896,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 label: 'GP_Splilt',
                 displayLabel: 'GP Split',
                 value: getOutputNumber('GP_Splilt', ['GP_Split']),
-                format: 'percent' as const,
+                format: 'currency' as const,
             },
             {
                 label: 'Total_GP_Take_Home',
@@ -888,14 +910,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     const [copied, setCopied] = useState(false);
     const isReadOnly = readOnly || !onInputChange;
-    const resolvedShareId = typeof shareId === 'string' && shareId.trim()
-        ? shareId.trim()
-        : typeof inputs?.spreadsheet_id === 'string' && inputs.spreadsheet_id.trim()
-            ? inputs.spreadsheet_id.trim()
-            : '';
-    const shareUrl = resolvedShareId && typeof window !== 'undefined'
-        ? `${window.location.origin}/share/${encodeURIComponent(resolvedShareId)}`
-        : null;
 
     const handleShare = async () => {
         if (!shareUrl) return;
@@ -959,16 +973,72 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
             </div>
 
-            <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                {summaryCards.map((card) => (
-                    <SummaryCard
-                        key={card.label}
-                        icon={card.icon}
-                        iconClass={card.iconClass}
-                        label={card.displayLabel}
-                        value={formatValue(card.value, card.format)}
-                    />
-                ))}
+            <section className="space-y-4">
+                <div className="rounded-xl p-5 bg-white dark:bg-[#232f48] border border-slate-200 dark:border-white/5 shadow-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+                                <span className="material-symbols-outlined">account_balance</span>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <p className="text-slate-500 dark:text-[#92a4c9] text-sm font-medium">Real Estate Valuation</p>
+                                <div className="relative">
+                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                                    <input
+                                        type="text"
+                                        value={realEstateDraft}
+                                        onChange={(e) => {
+                                            setRealEstateDraft(e.target.value);
+                                            if (hasEditedRealEstate) {
+                                                setHasEditedRealEstate(false);
+                                            }
+                                            if (!isReadOnly && onInputChange) {
+                                                onInputChange({ real_estate_valuation: e.target.value });
+                                            }
+                                        }}
+                                        className="w-full rounded-md border border-transparent bg-transparent text-slate-900 dark:text-white text-2xl font-bold tracking-tight focus:outline-none focus:ring-2 focus:ring-blue-500/30 pl-5 pr-2"
+                                        disabled={isReadOnly}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-3 w-full lg:max-w-sm">
+                            <input
+                                type="range"
+                                min={sliderMin}
+                                max={sliderMax}
+                                step={sliderStep}
+                                value={sliderValue}
+                                onChange={(e) => {
+                                    const nextValue = String(Math.round(Number(e.target.value)));
+                                    setRealEstateDraft(nextValue);
+                                    if (!hasEditedRealEstate) {
+                                        setHasEditedRealEstate(true);
+                                    }
+                                    if (!isReadOnly && onInputChange) {
+                                        onInputChange({ real_estate_valuation: nextValue });
+                                    }
+                                }}
+                                className="w-full accent-blue-500"
+                                disabled={isReadOnly}
+                            />
+                            <p className="text-xs text-slate-400 dark:text-[#92a4c9]">
+                                {formatValue(realEstateNumber, 'currency')}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {summaryCards.map((card) => (
+                        <SummaryCard
+                            key={card.label}
+                            icon={card.icon}
+                            iconClass={card.iconClass}
+                            label={card.displayLabel}
+                            value={formatValue(card.value, card.format)}
+                        />
+                    ))}
+                </div>
             </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1003,10 +1073,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     />
                     <DualAxisLineChart
                         title="Occupancy & ROE"
-                        leftLabel="Occupancy"
-                        rightLabel="ROE"
-                        leftSeries={occupancySeries}
-                        rightSeries={roeSeries}
+                        leftLabel="ROE"
+                        rightLabel="Occupancy"
+                        leftSeries={roeSeries}
+                        rightSeries={occupancySeries}
                         formatValue={formatValue}
                     />
                 </div>

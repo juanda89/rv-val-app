@@ -427,19 +427,6 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                 </div>
                 <div>
                     <DiscrepancyLabel
-                        label="Real Estate Valuation"
-                        fieldKey="real_estate_valuation"
-                        currentValue={data.real_estate_valuation}
-                        pdfValues={pdfValues}
-                    />
-                    <Input
-                        value={data.real_estate_valuation}
-                        onChange={e => handleChange('real_estate_valuation', e.target.value)}
-                        className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
-                    />
-                </div>
-                <div>
-                    <DiscrepancyLabel
                         label="Preferred Return (%)"
                         fieldKey="preferred_return"
                         currentValue={data.preferred_return}
