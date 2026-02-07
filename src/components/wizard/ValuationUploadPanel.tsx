@@ -22,11 +22,16 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
     const [message, setMessage] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [fileName, setFileName] = useState('');
+    const busyCallbackRef = useRef<ValuationUploadPanelProps['onBusyChange']>(onBusyChange);
 
     React.useEffect(() => {
-        onBusyChange?.(status === 'loading');
-        return () => onBusyChange?.(false);
-    }, [status, onBusyChange]);
+        busyCallbackRef.current = onBusyChange;
+    }, [onBusyChange]);
+
+    React.useEffect(() => {
+        busyCallbackRef.current?.(status === 'loading');
+        return () => busyCallbackRef.current?.(false);
+    }, [status]);
 
     const reset = () => {
         setStatus('idle');

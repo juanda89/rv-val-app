@@ -686,6 +686,11 @@ export async function POST(req: Request) {
         }
 
         if (response && !response.ok) {
+            const statusMsg = payload?.status?.msg || payload?.status?.message;
+            const statusTotal = payload?.status?.total;
+            if (statusMsg === 'SuccessWithoutResult' || statusTotal === 0) {
+                return NextResponse.json({ error: 'No property data found', found: false }, { status: 404 });
+            }
             return NextResponse.json(
                 { error: payload?.message || payload?.status?.msg || 'ATTOM request failed' },
                 { status: response.status }

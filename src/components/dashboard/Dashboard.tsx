@@ -140,17 +140,22 @@ const StackedBarChart = ({
                 <div className="flex items-end gap-4 h-48">
                     {labels.map((label, idx) => (
                         <div key={label} className="flex flex-1 flex-col items-center gap-2">
-                            <div className="relative flex h-40 w-full max-w-[56px] flex-col justify-end rounded-lg bg-slate-100 dark:bg-[#1a2434] overflow-hidden border border-slate-200/60 dark:border-white/5">
+                            <div className="relative flex h-40 w-full max-w-[56px] flex-col justify-end rounded-lg bg-slate-100 dark:bg-[#1a2434] border border-slate-200/60 dark:border-white/5 overflow-visible">
                                 {series.slice().reverse().map((line) => {
                                     const value = line.values[idx] ?? 0;
                                     const height = Math.max((value / maxTotal) * 100, 0);
+                                    const tooltipText = `${line.label} ${label}: ${formatValue ? formatValue(value) : value}`;
                                     return (
                                         <div
                                             key={`${line.label}-${label}`}
-                                            className="w-full"
+                                            className="w-full relative group"
                                             style={{ height: `${height}%`, backgroundColor: line.color }}
-                                            title={`${line.label} ${label}: ${formatValue ? formatValue(value) : value}`}
-                                        />
+                                            title={tooltipText}
+                                        >
+                                            <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 -top-8 whitespace-nowrap rounded-md bg-slate-900/90 px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 z-20 shadow-lg">
+                                                {tooltipText}
+                                            </span>
+                                        </div>
                                     );
                                 })}
                             </div>
@@ -624,12 +629,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }, [inputs, toNumber]);
 
     const lotCount = toNumber(inputs?.total_lots);
-    const showPnlTable = useMemo(
-        () =>
-            pnlData.incomeRows.some((row) => row.historical || row.grouped) ||
-            pnlData.expenseRows.some((row) => row.historical || row.grouped),
-        [pnlData]
-    );
+    const showPnlTable = true;
 
     const dollarsPerLot = getOutputNumber('$/Lot');
     const realEstateValuation = getOutputNumber('Real_Estate_Valuation');

@@ -376,6 +376,16 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                 }
                 throw new Error(payload?.error || 'ATTOM request failed');
             }
+            if (payload?.error) {
+                throw new Error(payload.error);
+            }
+            const statusMsg = payload?.status?.msg || payload?.status?.message;
+            const statusTotal = payload?.status?.total;
+            if (statusMsg === 'SuccessWithoutResult' || statusTotal === 0) {
+                setAttomMessage('ATTOM: no results found');
+                applyPdfFallback();
+                return;
+            }
             applyAttomData(payload);
             setAttomMessage(`AI: data found${payload?.source ? ` (${payload.source})` : ''}`);
         } catch (error: any) {
@@ -1032,6 +1042,31 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                     return;
                 }
                 throw new Error(payload?.error || 'ATTOM request failed');
+            }
+            if (payload?.error) {
+                throw new Error(payload.error);
+            }
+            const statusMsg = payload?.status?.msg || payload?.status?.message;
+            const statusTotal = payload?.status?.total;
+            if (statusMsg === 'SuccessWithoutResult' || statusTotal === 0) {
+                setAttomMessage('ATTOM: no results found');
+                const updates: Record<string, any> = {};
+                const pdfParcel = pdfValues.parcel_1 || pdfValues.parcelNumber;
+                if (isEmptyOrDefault('parcel_1', initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
+                if (isEmptyOrDefault('parcelNumber', initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
+                if (isEmptyOrDefault('parcel_1_acreage', initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
+                    updates.parcel_1_acreage = pdfValues.parcel_1_acreage;
+                }
+                if (isEmptyOrDefault('acreage', initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
+                if (isEmptyOrDefault('property_type', initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
+                if (isEmptyOrDefault('year_built', initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
+                if (isEmptyOrDefault('last_sale_price', initialData?.last_sale_price) && pdfValues.last_sale_price) {
+                    updates.last_sale_price = pdfValues.last_sale_price;
+                }
+                if (Object.keys(updates).length > 0) {
+                    onDataChange(updates);
+                }
+                return;
             }
             const identity = payload?.property_identity || {};
             const financials = payload?.financials || {};

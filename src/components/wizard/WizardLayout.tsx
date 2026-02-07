@@ -50,6 +50,10 @@ export const WizardLayout = ({
         setBusyStates((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
     }, []);
     const isExternalBusy = useMemo(() => Object.values(busyStates).some(Boolean), [busyStates]);
+    const handleUploadBusy = React.useCallback((busy: boolean) => setBusyState('upload', busy), [setBusyState]);
+    const handleAttomBusy = React.useCallback((busy: boolean) => setBusyState('attom', busy), [setBusyState]);
+    const handlePnlBusy = React.useCallback((busy: boolean) => setBusyState('pnl', busy), [setBusyState]);
+    const handleTaxesBusy = React.useCallback((busy: boolean) => setBusyState('taxes', busy), [setBusyState]);
     const [refreshingOutputs, setRefreshingOutputs] = useState(false);
     const { sync, isSyncing } = useSheetSync(projectId || '');
     const pendingSyncRef = useRef<Record<string, any>>({});
@@ -689,7 +693,7 @@ export const WizardLayout = ({
                 {currentStep !== 6 && (
                     <ValuationUploadPanel
                         onAutofill={handleAutofill}
-                        onBusyChange={(busy) => setBusyState('upload', busy)}
+                        onBusyChange={handleUploadBusy}
                     />
                 )}
 
@@ -736,7 +740,7 @@ export const WizardLayout = ({
                             <Step1Location
                                 onDataChange={handleDataChange}
                                 initialData={formData}
-                                onBusyChange={(busy) => setBusyState('attom', busy)}
+                                onBusyChange={handleAttomBusy}
                             />
                         )}
                         {currentStep === 2 && <Step2RentRoll onDataChange={handleDataChange} initialData={formData} />}
@@ -745,7 +749,7 @@ export const WizardLayout = ({
                                 onDataChange={handleDataChange}
                                 initialData={formData}
                                 projectId={projectId}
-                                onBusyChange={(busy) => setBusyState('pnl', busy)}
+                                onBusyChange={handlePnlBusy}
                             />
                         )}
                         {currentStep === 4 && <Step4Acquisition onDataChange={handleDataChange} initialData={formData} />}
@@ -754,7 +758,7 @@ export const WizardLayout = ({
                                 onDataChange={handleDataChange}
                                 initialData={formData}
                                 address={formData.address}
-                                onBusyChange={(busy) => setBusyState('taxes', busy)}
+                                onBusyChange={handleTaxesBusy}
                             />
                         )}
                         {currentStep === 6 && (
