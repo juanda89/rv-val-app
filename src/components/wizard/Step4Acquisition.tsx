@@ -11,38 +11,51 @@ interface Step4Props {
 
 export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialData }) => {
     const pdfValues = initialData?.pdf_values || {};
+    const normalizeYesNo = (value: any) => {
+        if (value === null || value === undefined || value === '') return '';
+        const normalized = String(value).trim().toUpperCase();
+        if (normalized === 'Y') return 'YES';
+        if (normalized === 'N') return 'NO';
+        return normalized;
+    };
+    const toTitleYesNo = (value: any) => {
+        const normalized = normalizeYesNo(value);
+        if (normalized === 'YES') return 'Yes';
+        if (normalized === 'NO') return 'No';
+        return value ?? '';
+    };
     const [inputs, setInputs] = useState({
-        appraisal: initialData?.appraisal || '',
-        ppa: initialData?.ppa || '',
-        pca: initialData?.pca || '',
-        esa_phase_1: initialData?.esa_phase_1 || '',
-        pza: initialData?.pza || '',
-        survey: initialData?.survey || '',
-        camera_sewer_electrical_inspection: initialData?.camera_sewer_electrical_inspection || '',
-        water_leak_detection: initialData?.water_leak_detection || '',
-        buyer_legal: initialData?.buyer_legal || '',
-        lender_legal: initialData?.lender_legal || '',
-        title_and_closing: initialData?.title_and_closing || '',
-        loan_origination: initialData?.loan_origination || '',
-        travel: initialData?.travel || '',
-        contingency: initialData?.contingency || '',
-        rate_buy_down: initialData?.rate_buy_down || '',
-        buyer_paid_broker_commission: initialData?.buyer_paid_broker_commission || '',
-        acquisition_fee: initialData?.acquisition_fee || '',
-        cost_of_sale: initialData?.cost_of_sale || '',
-        credit_loss: initialData?.credit_loss || '',
-        annual_inflation: initialData?.annual_inflation || '',
-        management_fee: initialData?.management_fee || '',
-        monthly_min_management_fee: initialData?.monthly_min_management_fee || '',
-        full_whammy_tax_bump: initialData?.full_whammy_tax_bump || '',
-        year_1_tax_increase: initialData?.year_1_tax_increase || '',
-        property_manager_salary: initialData?.property_manager_salary || '',
-        assistant_property_manager_salary: initialData?.assistant_property_manager_salary || '',
-        maintenance_man_salary: initialData?.maintenance_man_salary || '',
-        number_of_pms: initialData?.number_of_pms || '',
-        number_of_apms: initialData?.number_of_apms || '',
-        number_of_mms: initialData?.number_of_mms || '',
-        rm_per_lot: initialData?.rm_per_lot || '',
+        appraisal: initialData?.appraisal ?? '',
+        ppa: initialData?.ppa ?? '',
+        pca: initialData?.pca ?? '',
+        esa_phase_1: initialData?.esa_phase_1 ?? '',
+        pza: initialData?.pza ?? '',
+        survey: initialData?.survey ?? '',
+        camera_sewer_electrical_inspection: initialData?.camera_sewer_electrical_inspection ?? '',
+        water_leak_detection: initialData?.water_leak_detection ?? '',
+        buyer_legal: initialData?.buyer_legal ?? '',
+        lender_legal: initialData?.lender_legal ?? '',
+        title_and_closing: initialData?.title_and_closing ?? '',
+        loan_origination: initialData?.loan_origination ?? '',
+        travel: initialData?.travel ?? '',
+        contingency: initialData?.contingency ?? '',
+        rate_buy_down: initialData?.rate_buy_down ?? '',
+        buyer_paid_broker_commission: initialData?.buyer_paid_broker_commission ?? '',
+        acquisition_fee: initialData?.acquisition_fee ?? '',
+        cost_of_sale: initialData?.cost_of_sale ?? '',
+        credit_loss: initialData?.credit_loss ?? '',
+        annual_inflation: initialData?.annual_inflation ?? '',
+        management_fee: initialData?.management_fee ?? '',
+        monthly_min_management_fee: initialData?.monthly_min_management_fee ?? '',
+        full_whammy_tax_bump: toTitleYesNo(initialData?.full_whammy_tax_bump),
+        year_1_tax_increase: initialData?.year_1_tax_increase ?? '',
+        property_manager_salary: initialData?.property_manager_salary ?? '',
+        assistant_property_manager_salary: initialData?.assistant_property_manager_salary ?? '',
+        maintenance_man_salary: initialData?.maintenance_man_salary ?? '',
+        number_of_pms: initialData?.number_of_pms ?? '',
+        number_of_apms: initialData?.number_of_apms ?? '',
+        number_of_mms: initialData?.number_of_mms ?? '',
+        rm_per_lot: initialData?.rm_per_lot ?? '',
     });
 
     useEffect(() => {
@@ -52,37 +65,37 @@ export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialDa
 
     useEffect(() => {
         setInputs({
-            appraisal: initialData?.appraisal || '',
-            ppa: initialData?.ppa || '',
-            pca: initialData?.pca || '',
-            esa_phase_1: initialData?.esa_phase_1 || '',
-            pza: initialData?.pza || '',
-            survey: initialData?.survey || '',
-            camera_sewer_electrical_inspection: initialData?.camera_sewer_electrical_inspection || '',
-            water_leak_detection: initialData?.water_leak_detection || '',
-            buyer_legal: initialData?.buyer_legal || '',
-            lender_legal: initialData?.lender_legal || '',
-            title_and_closing: initialData?.title_and_closing || '',
-            loan_origination: initialData?.loan_origination || '',
-            travel: initialData?.travel || '',
-            contingency: initialData?.contingency || '',
-            rate_buy_down: initialData?.rate_buy_down || '',
-            buyer_paid_broker_commission: initialData?.buyer_paid_broker_commission || '',
-            acquisition_fee: initialData?.acquisition_fee || '',
-            cost_of_sale: initialData?.cost_of_sale || '',
-            credit_loss: initialData?.credit_loss || '',
-            annual_inflation: initialData?.annual_inflation || '',
-            management_fee: initialData?.management_fee || '',
-            monthly_min_management_fee: initialData?.monthly_min_management_fee || '',
-            full_whammy_tax_bump: initialData?.full_whammy_tax_bump || '',
-            year_1_tax_increase: initialData?.year_1_tax_increase || '',
-            property_manager_salary: initialData?.property_manager_salary || '',
-            assistant_property_manager_salary: initialData?.assistant_property_manager_salary || '',
-            maintenance_man_salary: initialData?.maintenance_man_salary || '',
-            number_of_pms: initialData?.number_of_pms || '',
-            number_of_apms: initialData?.number_of_apms || '',
-            number_of_mms: initialData?.number_of_mms || '',
-            rm_per_lot: initialData?.rm_per_lot || '',
+            appraisal: initialData?.appraisal ?? '',
+            ppa: initialData?.ppa ?? '',
+            pca: initialData?.pca ?? '',
+            esa_phase_1: initialData?.esa_phase_1 ?? '',
+            pza: initialData?.pza ?? '',
+            survey: initialData?.survey ?? '',
+            camera_sewer_electrical_inspection: initialData?.camera_sewer_electrical_inspection ?? '',
+            water_leak_detection: initialData?.water_leak_detection ?? '',
+            buyer_legal: initialData?.buyer_legal ?? '',
+            lender_legal: initialData?.lender_legal ?? '',
+            title_and_closing: initialData?.title_and_closing ?? '',
+            loan_origination: initialData?.loan_origination ?? '',
+            travel: initialData?.travel ?? '',
+            contingency: initialData?.contingency ?? '',
+            rate_buy_down: initialData?.rate_buy_down ?? '',
+            buyer_paid_broker_commission: initialData?.buyer_paid_broker_commission ?? '',
+            acquisition_fee: initialData?.acquisition_fee ?? '',
+            cost_of_sale: initialData?.cost_of_sale ?? '',
+            credit_loss: initialData?.credit_loss ?? '',
+            annual_inflation: initialData?.annual_inflation ?? '',
+            management_fee: initialData?.management_fee ?? '',
+            monthly_min_management_fee: initialData?.monthly_min_management_fee ?? '',
+            full_whammy_tax_bump: toTitleYesNo(initialData?.full_whammy_tax_bump),
+            year_1_tax_increase: initialData?.year_1_tax_increase ?? '',
+            property_manager_salary: initialData?.property_manager_salary ?? '',
+            assistant_property_manager_salary: initialData?.assistant_property_manager_salary ?? '',
+            maintenance_man_salary: initialData?.maintenance_man_salary ?? '',
+            number_of_pms: initialData?.number_of_pms ?? '',
+            number_of_apms: initialData?.number_of_apms ?? '',
+            number_of_mms: initialData?.number_of_mms ?? '',
+            rm_per_lot: initialData?.rm_per_lot ?? '',
         });
     }, [
         initialData?.appraisal,
@@ -121,6 +134,8 @@ export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialDa
     const handleChange = (field: string, value: string) => {
         setInputs((prev) => ({ ...prev, [field]: value }));
     };
+
+    const whammyValue = normalizeYesNo(inputs.full_whammy_tax_bump);
 
     return (
         <div className="space-y-6">
@@ -162,8 +177,43 @@ export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialDa
                     <InputField label="Annual Inflation" value={inputs.annual_inflation} onChange={handleChange} field="annual_inflation" pdfValues={pdfValues} />
                     <InputField label="Management Fee" value={inputs.management_fee} onChange={handleChange} field="management_fee" pdfValues={pdfValues} />
                     <InputField label="Monthly Minimum Management Fee" value={inputs.monthly_min_management_fee} onChange={handleChange} field="monthly_min_management_fee" pdfValues={pdfValues} />
-                    <InputField label="Full Whammy Tax Bump?" value={inputs.full_whammy_tax_bump} onChange={handleChange} field="full_whammy_tax_bump" pdfValues={pdfValues} />
-                    <InputField label="Year 1 Tax Increase" value={inputs.year_1_tax_increase} onChange={handleChange} field="year_1_tax_increase" pdfValues={pdfValues} />
+                    <div>
+                        <DiscrepancyLabel
+                            label="Full Whammy Tax Bump?"
+                            fieldKey="full_whammy_tax_bump"
+                            currentValue={inputs.full_whammy_tax_bump}
+                            pdfValues={pdfValues}
+                        />
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => handleChange('full_whammy_tax_bump', 'Yes')}
+                                className={`px-4 py-2 rounded-md border text-sm font-semibold transition ${
+                                    whammyValue === 'YES'
+                                        ? 'bg-blue-600 text-white border-blue-600'
+                                        : 'bg-white dark:bg-[#283339] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-transparent'
+                                }`}
+                                aria-pressed={whammyValue === 'YES'}
+                            >
+                                Yes
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleChange('full_whammy_tax_bump', 'No')}
+                                className={`px-4 py-2 rounded-md border text-sm font-semibold transition ${
+                                    whammyValue === 'NO'
+                                        ? 'bg-blue-600 text-white border-blue-600'
+                                        : 'bg-white dark:bg-[#283339] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-transparent'
+                                }`}
+                                aria-pressed={whammyValue === 'NO'}
+                            >
+                                No
+                            </button>
+                        </div>
+                    </div>
+                    {whammyValue === 'NO' && (
+                        <InputField label="Year 1 Tax Increase" value={inputs.year_1_tax_increase} onChange={handleChange} field="year_1_tax_increase" pdfValues={pdfValues} />
+                    )}
                 </div>
             </div>
 

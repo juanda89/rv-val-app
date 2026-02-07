@@ -11,17 +11,29 @@ interface Step2Props {
 
 export const Step2RentRoll: React.FC<Step2Props> = ({ onDataChange, initialData }) => {
     const pdfValues = initialData?.pdf_values || {};
+    const normalizeNumeric = (value: any) => {
+        if (value === null || value === undefined) return '';
+        if (typeof value === 'number') return String(value);
+        return String(value).replace(/[$,%\\s,]/g, '');
+    };
+    const normalizeYesNo = (value: any) => {
+        if (value === null || value === undefined || value === '') return '';
+        const normalized = String(value).trim().toUpperCase();
+        if (normalized === 'Y') return 'YES';
+        if (normalized === 'N') return 'NO';
+        return normalized;
+    };
     const [inputs, setInputs] = useState({
-        total_lots: initialData?.total_lots || '',
-        occupied_lots: initialData?.occupied_lots || '',
-        current_lot_rent: initialData?.current_lot_rent || '',
-        base_capx: initialData?.base_capx || '',
-        capx_mgmt_fees: initialData?.capx_mgmt_fees || '',
-        absorption_lease_up_period: initialData?.absorption_lease_up_period || '',
-        terminal_occupancy: initialData?.terminal_occupancy || '',
-        rent_bump_y1: initialData?.rent_bump_y1 || '',
-        rent_bump_y2_5: initialData?.rent_bump_y2_5 || '',
-        loss_to_lease: initialData?.loss_to_lease || '',
+        total_lots: normalizeNumeric(initialData?.total_lots),
+        occupied_lots: normalizeNumeric(initialData?.occupied_lots),
+        current_lot_rent: normalizeNumeric(initialData?.current_lot_rent),
+        base_capx: normalizeNumeric(initialData?.base_capx),
+        capx_mgmt_fees: normalizeNumeric(initialData?.capx_mgmt_fees),
+        absorption_lease_up_period: normalizeNumeric(initialData?.absorption_lease_up_period),
+        terminal_occupancy: normalizeNumeric(initialData?.terminal_occupancy),
+        rent_bump_y1: normalizeNumeric(initialData?.rent_bump_y1),
+        rent_bump_y2_5: normalizeNumeric(initialData?.rent_bump_y2_5),
+        loss_to_lease: normalizeYesNo(initialData?.loss_to_lease),
     });
 
     const [error, setError] = useState<string | null>(null);
@@ -39,16 +51,16 @@ export const Step2RentRoll: React.FC<Step2Props> = ({ onDataChange, initialData 
 
     useEffect(() => {
         const next = {
-            total_lots: initialData?.total_lots || '',
-            occupied_lots: initialData?.occupied_lots || '',
-            current_lot_rent: initialData?.current_lot_rent || '',
-            base_capx: initialData?.base_capx || '',
-            capx_mgmt_fees: initialData?.capx_mgmt_fees || '',
-            absorption_lease_up_period: initialData?.absorption_lease_up_period || '',
-            terminal_occupancy: initialData?.terminal_occupancy || '',
-            rent_bump_y1: initialData?.rent_bump_y1 || '',
-            rent_bump_y2_5: initialData?.rent_bump_y2_5 || '',
-            loss_to_lease: initialData?.loss_to_lease || '',
+            total_lots: normalizeNumeric(initialData?.total_lots),
+            occupied_lots: normalizeNumeric(initialData?.occupied_lots),
+            current_lot_rent: normalizeNumeric(initialData?.current_lot_rent),
+            base_capx: normalizeNumeric(initialData?.base_capx),
+            capx_mgmt_fees: normalizeNumeric(initialData?.capx_mgmt_fees),
+            absorption_lease_up_period: normalizeNumeric(initialData?.absorption_lease_up_period),
+            terminal_occupancy: normalizeNumeric(initialData?.terminal_occupancy),
+            rent_bump_y1: normalizeNumeric(initialData?.rent_bump_y1),
+            rent_bump_y2_5: normalizeNumeric(initialData?.rent_bump_y2_5),
+            loss_to_lease: normalizeYesNo(initialData?.loss_to_lease),
         };
         const hasChanges =
             next.total_lots !== inputs.total_lots ||

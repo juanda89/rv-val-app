@@ -88,7 +88,7 @@ export async function POST(req: Request) {
             const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
             return `'${SHEET_MAPPING.inputs.sheetName}'!${cell}`;
         });
-        const inputPdfRanges = inputKeys.map((key) => {
+        const inputDefaultRanges = inputKeys.map((key) => {
             const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
             const row = getRowFromCell(cell);
             return `'${SHEET_MAPPING.inputs.sheetName}'!D${row}`;
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
         const [inputsResponse, outputResponse, pnlResponse] = await Promise.all([
             sheets.spreadsheets.values.batchGet({
                 spreadsheetId,
-                ranges: [...inputRanges, ...inputPdfRanges],
+                ranges: [...inputRanges, ...inputDefaultRanges],
             }),
             sheets.spreadsheets.values.batchGet({
                 spreadsheetId,
@@ -133,17 +133,17 @@ export async function POST(req: Request) {
             }
         });
 
-        const pdfValues: Record<string, any> = {};
+        const defaultValues: Record<string, any> = {};
         inputRangesData.slice(inputKeys.length).forEach((range, index) => {
             const key = inputKeys[index];
             const value = range.values?.[0]?.[0];
             if (value !== undefined && value !== null && value !== '') {
-                pdfValues[key] = value;
+                defaultValues[key] = value;
             }
         });
 
-        if (Object.keys(pdfValues).length > 0) {
-            inputs.pdf_values = pdfValues;
+        if (Object.keys(defaultValues).length > 0) {
+            inputs.default_values = defaultValues;
         }
 
         const pnlRangesData = pnlResponse.data.valueRanges || [];

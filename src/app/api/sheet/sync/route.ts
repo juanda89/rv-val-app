@@ -45,28 +45,11 @@ export async function POST(req: Request) {
         const projectName = normalizeString(inputs.name) || project.name || '';
         const projectAddress = normalizeString(inputs.address) || project.address || '';
         const projectCity = normalizeString(inputs.city) || '';
-        const pdfValues = inputs.__pdf_values || inputs.pdf_values || {};
 
         const mergedInputs: Record<string, any> = { ...inputs };
         if (projectName) mergedInputs.name = projectName;
         if (projectAddress) mergedInputs.address = projectAddress;
         if (projectCity) mergedInputs.city = projectCity;
-
-        const getRowFromCell = (cell: string) => {
-            const match = cell.match(/\d+$/);
-            return match ? Number(match[0]) : 0;
-        };
-
-        const inputKeys = Object.keys(SHEET_MAPPING.inputs).filter(k => k !== 'sheetName');
-        inputKeys.forEach(key => {
-            const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
-            const row = getRowFromCell(cell);
-            if (!row) return;
-            updates.push({
-                range: `'${inputSheetName}'!B${row}`,
-                values: [[key]],
-            });
-        });
 
         for (const [key, value] of Object.entries(mergedInputs)) {
             // Cast key to check if it exists in mapping
@@ -76,20 +59,6 @@ export async function POST(req: Request) {
             if (cell && mappingKey !== 'sheetName') {
                 updates.push({
                     range: `'${inputSheetName}'!${cell}`,
-                    values: [[value]],
-                });
-            }
-        }
-
-        if (pdfValues && typeof pdfValues === 'object') {
-            for (const [key, value] of Object.entries(pdfValues)) {
-                const mappingKey = key as keyof typeof SHEET_MAPPING.inputs;
-                const cell = SHEET_MAPPING.inputs[mappingKey];
-                if (!cell || mappingKey === 'sheetName') continue;
-                const row = getRowFromCell(cell);
-                if (!row) continue;
-                updates.push({
-                    range: `'${inputSheetName}'!D${row}`,
                     values: [[value]],
                 });
             }

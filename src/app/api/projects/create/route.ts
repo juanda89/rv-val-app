@@ -1,5 +1,62 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getSheetsClient } from '@/lib/google';
+import { SHEET_MAPPING } from '@/config/sheetMapping';
+
+const getRowFromCell = (cell: string) => {
+    const match = cell.match(/\d+$/);
+    return match ? Number(match[0]) : 0;
+};
+
+const applyDefaultValues = async (spreadsheetId: string) => {
+    const sheets = await getSheetsClient();
+    const inputSheetName = SHEET_MAPPING.inputs.sheetName;
+    const inputKeys = Object.keys(SHEET_MAPPING.inputs).filter(k => k !== 'sheetName');
+
+    const inputRanges = inputKeys.map((key) => {
+        const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
+        return `'${inputSheetName}'!${cell}`;
+    });
+    const defaultRanges = inputKeys.map((key) => {
+        const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
+        const row = getRowFromCell(cell);
+        return `'${inputSheetName}'!D${row}`;
+    });
+
+    const response = await sheets.spreadsheets.values.batchGet({
+        spreadsheetId,
+        ranges: [...inputRanges, ...defaultRanges],
+    });
+
+    const valueRanges = response.data.valueRanges || [];
+    const updates: { range: string; values: any[][] }[] = [];
+
+    inputKeys.forEach((key, index) => {
+        const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
+        const currentValue = valueRanges[index]?.values?.[0]?.[0];
+        const defaultValue = valueRanges[inputKeys.length + index]?.values?.[0]?.[0];
+
+        if ((currentValue === undefined || currentValue === null || currentValue === '') &&
+            defaultValue !== undefined &&
+            defaultValue !== null &&
+            defaultValue !== '') {
+            updates.push({
+                range: `'${inputSheetName}'!${cell}`,
+                values: [[defaultValue]],
+            });
+        }
+    });
+
+    if (updates.length > 0) {
+        await sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+                data: updates,
+                valueInputOption: 'USER_ENTERED',
+            },
+        });
+    }
+};
 
 export async function POST(req: Request) {
     try {
@@ -66,6 +123,12 @@ export async function POST(req: Request) {
 
         if (!spreadsheetId) {
             throw new Error('Webhook did not return a file ID');
+        }
+
+        try {
+            await applyDefaultValues(spreadsheetId);
+        } catch (defaultsError) {
+            console.warn('Failed to apply default values from column D:', defaultsError);
         }
 
         // Insert into Supabase

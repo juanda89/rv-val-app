@@ -60,6 +60,11 @@ export const WizardLayout = ({
         return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     };
     const normalizeName = (value: string) => value.trim().toLowerCase();
+    const normalizeComparable = (value: any) =>
+        String(value ?? '')
+            .toLowerCase()
+            .replace(/[\s-]+/g, '')
+            .trim();
     const parseAmount = (value: unknown) => {
         if (value === null || value === undefined || value === '') return null;
         if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -435,8 +440,14 @@ export const WizardLayout = ({
 
         setFormData((prev: any) => {
             const next = { ...prev };
+            const defaultValues = prev?.default_values || {};
+            const isDefaultValue = (key: string, currentValue: any) =>
+                defaultValues[key] !== undefined &&
+                defaultValues[key] !== null &&
+                defaultValues[key] !== '' &&
+                normalizeComparable(currentValue) === normalizeComparable(defaultValues[key]);
             Object.entries(updates).forEach(([key, value]) => {
-                if (isEmptyValue(next[key])) {
+                if (isEmptyValue(next[key]) || isDefaultValue(key, next[key])) {
                     next[key] = value;
                 } else {
                     delete updates[key];
@@ -487,12 +498,8 @@ export const WizardLayout = ({
             return next;
         });
 
-        if (projectId && (Object.keys(updates).length > 0 || Object.keys(pdfValues).length > 0)) {
-            const payload: Record<string, any> = { ...updates };
-            if (Object.keys(pdfValues).length > 0) {
-                payload.__pdf_values = pdfValues;
-            }
-            await sync(payload);
+        if (projectId && Object.keys(updates).length > 0) {
+            await sync({ ...updates });
         }
     }, [projectId, sync]);
 
@@ -562,6 +569,33 @@ export const WizardLayout = ({
                     // Sync the initial data
                     const results = await sync(data, newProjectId);
                     if (results) setOutputs(results);
+                    try {
+                        const loadResponse = await fetch('/api/sheet/load', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': token ? `Bearer ${token}` : ''
+                            },
+                            body: JSON.stringify({ projectId: newProjectId }),
+                        });
+                        const loadPayload = await loadResponse.json();
+                        if (loadResponse.ok && loadPayload?.inputs) {
+                            const inputs = loadPayload.inputs || {};
+                            const defaultValues = inputs.default_values || {};
+                            const mergedInputs = { ...defaultValues, ...inputs };
+                            setFormData((prev: any) => {
+                                const next = { ...prev, default_values: defaultValues };
+                                Object.entries(mergedInputs).forEach(([key, value]) => {
+                                    if (isEmptyValue(next[key])) {
+                                        next[key] = value;
+                                    }
+                                });
+                                return next;
+                            });
+                        }
+                    } catch (loadError) {
+                        console.warn('Failed to load defaults after project creation:', loadError);
+                    }
                     setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
                 } else if (json.error) {
                     console.error('Project creation error:', json.error);

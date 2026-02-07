@@ -77,6 +77,8 @@ export const CreateProjectClient = () => {
                 try {
                     const sheetPayload = await fetchSheetData(data.id);
                     const inputs = sheetPayload?.inputs || {};
+                    const defaultValues = inputs?.default_values || {};
+                    const mergedInputs = { ...defaultValues, ...inputs, default_values: defaultValues };
                     const pnl = sheetPayload?.pnl || {};
                     const outputs = sheetPayload?.outputs || {};
 
@@ -85,7 +87,7 @@ export const CreateProjectClient = () => {
                         address: data.address,
                         spreadsheet_id: data.spreadsheet_id,
                         outputs,
-                        ...inputs,
+                        ...mergedInputs,
                         pnl_income_items: pnl.incomeItems || [],
                         pnl_expense_items: pnl.expenseItems || [],
                         pnl_grouped_income: pnl.groupedIncome || [],

@@ -97,14 +97,14 @@ const extractStateFromAddressString = (address?: string) => {
         .map(part => part.trim())
         .filter(Boolean);
     if (parts.length < 3) return '';
-    const stateZip = parts[2] || '';
-    return stateZip.split(' ')[0] || '';
+    const stateZip = parts[2] ?? '';
+    return stateZip.split(' ')[0] ?? '';
 };
 
 const extractCityFromGeocode = (result: any) => {
     const components = result?.address_components || [];
     const findComponent = (type: string) =>
-        components.find((component: any) => component.types?.includes(type))?.long_name || '';
+        components.find((component: any) => component.types?.includes(type))?.long_name ?? '';
 
     return (
         findComponent('locality') ||
@@ -153,7 +153,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
     });
 
     const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | null>(initialData?.lat ? { lat: initialData.lat, lng: initialData.lng } : null);
-    const [projectName, setProjectName] = useState(initialData?.name || '');
+    const [projectName, setProjectName] = useState(initialData?.name ?? '');
     const [attomLoading, setAttomLoading] = useState(false);
     const [attomError, setAttomError] = useState<string | null>(null);
     const [attomMessage, setAttomMessage] = useState<string | null>(null);
@@ -161,8 +161,21 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
     const lastAttomAddressRef = React.useRef<string>('');
     const lastGeocodedAddressRef = React.useRef<string>('');
     const pdfValues = initialData?.pdf_values || {};
+    const defaultValues = initialData?.default_values || {};
     const isEmptyValue = (value: any) =>
         value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+    const normalizeComparable = (value: any) =>
+        String(value ?? '')
+            .toLowerCase()
+            .replace(/[\s-]+/g, '')
+            .trim();
+    const isDefaultValue = (key: string, currentValue: any) =>
+        defaultValues[key] !== undefined &&
+        defaultValues[key] !== null &&
+        defaultValues[key] !== '' &&
+        normalizeComparable(currentValue) === normalizeComparable(defaultValues[key]);
+    const isEmptyOrDefault = (key: string, currentValue: any) =>
+        isEmptyValue(currentValue) || isDefaultValue(key, currentValue);
 
     React.useEffect(() => {
         if (typeof initialData?.mobile_home_park_name === 'string') {
@@ -225,13 +238,9 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
         };
     }, [initialData?.address, initialData?.lat, initialData?.lng, initialData?.city, initialData?.county, onDataChange, ready]);
 
-    const normalizeComparable = (value: any) =>
-        String(value ?? '')
-            .toLowerCase()
-            .replace(/[\s-]+/g, '')
-            .trim();
-    const shouldOverrideWithAttom = (currentValue: any, pdfValue: any) =>
-        isEmptyValue(currentValue) || normalizeComparable(currentValue) === normalizeComparable(pdfValue);
+    const shouldOverrideWithAttom = (currentValue: any, pdfValue: any, key: string) =>
+        isEmptyOrDefault(key, currentValue) ||
+        normalizeComparable(currentValue) === normalizeComparable(pdfValue);
 
     const applyAttomData = (payload: any) => {
         const identity = payload?.property_identity;
@@ -243,74 +252,75 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
         const demographicsDetails = payload?.demographics_details || null;
 
         const updates: Record<string, any> = {};
-        if (identity.apn && shouldOverrideWithAttom(initialData?.parcelNumber, pdfValues.parcelNumber)) {
+        if (identity.apn && shouldOverrideWithAttom(initialData?.parcelNumber, pdfValues.parcelNumber, 'parcelNumber')) {
             updates.parcelNumber = identity.apn;
         }
-        if (identity.apn && shouldOverrideWithAttom(initialData?.parcel_1, pdfValues.parcel_1)) {
+        if (identity.apn && shouldOverrideWithAttom(initialData?.parcel_1, pdfValues.parcel_1, 'parcel_1')) {
             updates.parcel_1 = identity.apn;
         }
-        if (identity.fips_code && isEmptyValue(initialData?.fips_code)) {
+        if (identity.fips_code && isEmptyOrDefault('fips_code', initialData?.fips_code)) {
             updates.fips_code = identity.fips_code;
         }
-        if (identity.acreage && shouldOverrideWithAttom(initialData?.acreage, pdfValues.acreage)) {
+        if (identity.acreage && shouldOverrideWithAttom(initialData?.acreage, pdfValues.acreage, 'acreage')) {
             updates.acreage = identity.acreage;
         }
-        if (identity.acreage && shouldOverrideWithAttom(initialData?.parcel_1_acreage, pdfValues.parcel_1_acreage)) {
+        if (identity.acreage && shouldOverrideWithAttom(initialData?.parcel_1_acreage, pdfValues.parcel_1_acreage, 'parcel_1_acreage')) {
             updates.parcel_1_acreage = identity.acreage;
         }
-        if (identity.year_built && shouldOverrideWithAttom(initialData?.year_built, pdfValues.year_built)) {
+        if (identity.year_built && shouldOverrideWithAttom(initialData?.year_built, pdfValues.year_built, 'year_built')) {
             updates.year_built = identity.year_built;
         }
-        if (identity.property_type && shouldOverrideWithAttom(initialData?.property_type, pdfValues.property_type)) {
+        if (identity.property_type && shouldOverrideWithAttom(initialData?.property_type, pdfValues.property_type, 'property_type')) {
             updates.property_type = identity.property_type;
         }
-        if (financials.last_sale_price && shouldOverrideWithAttom(initialData?.last_sale_price, pdfValues.last_sale_price)) {
+        if (financials.last_sale_price && shouldOverrideWithAttom(initialData?.last_sale_price, pdfValues.last_sale_price, 'last_sale_price')) {
             updates.last_sale_price = financials.last_sale_price;
         }
         if (!initialData?.mobile_home_park_name && initialData?.name) updates.mobile_home_park_name = initialData.name;
 
-        if (!initialData?.population && demographics.population) updates.population = demographics.population;
-        if (!initialData?.population_change && demographics.population_change) {
+        if (isEmptyOrDefault('population', initialData?.population) && demographics.population) updates.population = demographics.population;
+        if (isEmptyOrDefault('population_change', initialData?.population_change) && demographics.population_change) {
             updates.population_change = demographics.population_change;
         }
-        if (!initialData?.median_household_income && demographics.median_household_income) {
+        if (isEmptyOrDefault('median_household_income', initialData?.median_household_income) && demographics.median_household_income) {
             updates.median_household_income = demographics.median_household_income;
         }
-        if (!initialData?.median_household_income_change && demographics.median_household_income_change) {
+        if (isEmptyOrDefault('median_household_income_change', initialData?.median_household_income_change) && demographics.median_household_income_change) {
             updates.median_household_income_change = demographics.median_household_income_change;
         }
-        if (!initialData?.poverty_rate && demographics.poverty_rate) updates.poverty_rate = demographics.poverty_rate;
-        if (!initialData?.number_of_employees && demographics.number_of_employees) {
+        if (isEmptyOrDefault('poverty_rate', initialData?.poverty_rate) && demographics.poverty_rate) updates.poverty_rate = demographics.poverty_rate;
+        if (isEmptyOrDefault('number_of_employees', initialData?.number_of_employees) && demographics.number_of_employees) {
             updates.number_of_employees = demographics.number_of_employees;
         }
-        if (!initialData?.number_of_employees_change && demographics.number_of_employees_change) {
+        if (isEmptyOrDefault('number_of_employees_change', initialData?.number_of_employees_change) && demographics.number_of_employees_change) {
             updates.number_of_employees_change = demographics.number_of_employees_change;
         }
-        if (!initialData?.median_property_value && demographics.median_property_value) {
+        if (isEmptyOrDefault('median_property_value', initialData?.median_property_value) && demographics.median_property_value) {
             updates.median_property_value = demographics.median_property_value;
         }
-        if (!initialData?.median_property_value_change && demographics.median_property_value_change) {
+        if (isEmptyOrDefault('median_property_value_change', initialData?.median_property_value_change) && demographics.median_property_value_change) {
             updates.median_property_value_change = demographics.median_property_value_change;
         }
         const crimeDetails = demographicsDetails?.crime || {};
-        const violentCrimeValue = demographics.violent_crime ?? crimeDetails?.crime_Index ?? crimeDetails?.aggravated_Assault_Index ?? null;
-        const propertyCrimeValue = demographics.property_crime ?? crimeDetails?.motor_Vehicle_Theft_Index ?? null;
+        const violentCrimeValue = crimeDetails?.crime_Index ?? initialData?.crime_Index ?? demographics.violent_crime ?? null;
+        const propertyCrimeValue =
+            crimeDetails?.motor_Vehicle_Theft_Index ?? initialData?.motor_Vehicle_Theft_Index ?? demographics.property_crime ?? null;
         if (violentCrimeValue !== null && violentCrimeValue !== undefined) {
             updates.violent_crime = violentCrimeValue;
         }
         if (propertyCrimeValue !== null && propertyCrimeValue !== undefined) {
             updates.property_crime = propertyCrimeValue;
         }
-        if (!initialData?.two_br_rent && demographics.two_br_rent) {
+        if (isEmptyOrDefault('two_br_rent', initialData?.two_br_rent) && demographics.two_br_rent) {
             updates.two_br_rent = demographics.two_br_rent;
         }
-        if (!initialData?.eli_renter_households && housing.eli_renter_households) {
+        if (isEmptyOrDefault('eli_renter_households', initialData?.eli_renter_households) && housing.eli_renter_households) {
             updates.eli_renter_households = housing.eli_renter_households;
         }
-        if (!initialData?.units_per_100 && housing.affordable_units_per_100) {
+        if (isEmptyOrDefault('units_per_100', initialData?.units_per_100) && housing.affordable_units_per_100) {
             updates.units_per_100 = housing.affordable_units_per_100;
         }
-        if (!initialData?.total_units && housing.total_units) updates.total_units = housing.total_units;
+        if (isEmptyOrDefault('total_units', initialData?.total_units) && housing.total_units) updates.total_units = housing.total_units;
         if (demographicsDetails && !initialData?.demographics_details) {
             updates.demographics_details = demographicsDetails;
         }
@@ -324,15 +334,15 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
         if (!pdfValues) return;
         const updates: Record<string, any> = {};
         const pdfParcel = pdfValues.parcel_1 || pdfValues.parcelNumber;
-        if (isEmptyValue(initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
-        if (isEmptyValue(initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
-        if (isEmptyValue(initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
+        if (isEmptyOrDefault('parcel_1', initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
+        if (isEmptyOrDefault('parcelNumber', initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
+        if (isEmptyOrDefault('parcel_1_acreage', initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
             updates.parcel_1_acreage = pdfValues.parcel_1_acreage;
         }
-        if (isEmptyValue(initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
-        if (isEmptyValue(initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
-        if (isEmptyValue(initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
-        if (isEmptyValue(initialData?.last_sale_price) && pdfValues.last_sale_price) {
+        if (isEmptyOrDefault('acreage', initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
+        if (isEmptyOrDefault('property_type', initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
+        if (isEmptyOrDefault('year_built', initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
+        if (isEmptyOrDefault('last_sale_price', initialData?.last_sale_price) && pdfValues.last_sale_price) {
             updates.last_sale_price = pdfValues.last_sale_price;
         }
         if (Object.keys(updates).length > 0) {
@@ -516,11 +526,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="City"
                         fieldKey="city"
-                        currentValue={initialData?.city || ''}
+                        currentValue={initialData?.city ?? ''}
                         pdfValues={pdfValues}
                     />
                     <Input
-                        value={initialData?.city || ''}
+                        value={initialData?.city ?? ''}
                         onChange={(e) => onDataChange({ city: e.target.value })}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -530,11 +540,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="State"
                         fieldKey="state"
-                        currentValue={initialData?.state || ''}
+                        currentValue={initialData?.state ?? ''}
                         pdfValues={pdfValues}
                     />
                     <Input
-                        value={initialData?.state || ''}
+                        value={initialData?.state ?? ''}
                         onChange={(e) => onDataChange({ state: e.target.value })}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -544,11 +554,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="County"
                         fieldKey="county"
-                        currentValue={initialData?.county || ''}
+                        currentValue={initialData?.county ?? ''}
                         pdfValues={pdfValues}
                     />
                     <Input
-                        value={initialData?.county || ''}
+                        value={initialData?.county ?? ''}
                         onChange={(e) => onDataChange({ county: e.target.value })}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -558,11 +568,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="Zip Code"
                         fieldKey="zip_code"
-                        currentValue={initialData?.zip_code || ''}
+                        currentValue={initialData?.zip_code ?? ''}
                         pdfValues={pdfValues}
                     />
                     <Input
-                        value={initialData?.zip_code || ''}
+                        value={initialData?.zip_code ?? ''}
                         onChange={(e) => onDataChange({ zip_code: e.target.value })}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -572,11 +582,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="FIPS Code"
                         fieldKey="fips_code"
-                        currentValue={initialData?.fips_code || ''}
+                        currentValue={initialData?.fips_code ?? ''}
                         pdfValues={pdfValues}
                     />
                     <Input
-                        value={initialData?.fips_code || ''}
+                        value={initialData?.fips_code ?? ''}
                         onChange={(e) => onDataChange({ fips_code: e.target.value })}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -586,11 +596,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="Parcel Number"
                         fieldKey="parcel_1"
-                        currentValue={initialData?.parcel_1 || initialData?.parcelNumber || ''}
+                        currentValue={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
                         pdfValues={pdfValues}
                     />
                     <Input
-                        value={initialData?.parcel_1 || initialData?.parcelNumber || ''}
+                        value={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
                         onChange={(e) => onDataChange({ parcel_1: e.target.value, parcelNumber: e.target.value })}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -600,12 +610,12 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="Acreage (Acres)"
                         fieldKey="parcel_1_acreage"
-                        currentValue={initialData?.parcel_1_acreage || initialData?.acreage || ''}
+                        currentValue={(initialData?.parcel_1_acreage ?? '') || (initialData?.acreage ?? '')}
                         pdfValues={pdfValues}
                     />
                     <Input
                         type="number"
-                        value={initialData?.parcel_1_acreage || initialData?.acreage || ''}
+                        value={(initialData?.parcel_1_acreage ?? '') || (initialData?.acreage ?? '')}
                         onChange={(e) => onDataChange({ parcel_1_acreage: e.target.value, acreage: e.target.value })}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -615,12 +625,12 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="Year Built"
                         fieldKey="year_built"
-                        currentValue={initialData?.year_built || ''}
+                        currentValue={initialData?.year_built ?? ''}
                         pdfValues={pdfValues}
                     />
                     <Input
                         type="number"
-                        value={initialData?.year_built || ''}
+                        value={initialData?.year_built ?? ''}
                         onChange={(e) => onDataChange({ year_built: e.target.value })}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -630,11 +640,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="Property Type"
                         fieldKey="property_type"
-                        currentValue={initialData?.property_type || ''}
+                        currentValue={initialData?.property_type ?? ''}
                         pdfValues={pdfValues}
                     />
                     <Input
-                        value={initialData?.property_type || ''}
+                        value={initialData?.property_type ?? ''}
                         onChange={(e) => onDataChange({ property_type: e.target.value })}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -644,14 +654,14 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                     <DiscrepancyLabel
                         label="Last Sale Price"
                         fieldKey="last_sale_price"
-                        currentValue={initialData?.last_sale_price || ''}
+                        currentValue={initialData?.last_sale_price ?? ''}
                         pdfValues={pdfValues}
                     />
                     <div className="relative">
                         <span className="absolute left-3 top-2 text-slate-400">$</span>
                         <Input
                             type="number"
-                            value={initialData?.last_sale_price || ''}
+                            value={initialData?.last_sale_price ?? ''}
                             onChange={(e) => onDataChange({ last_sale_price: e.target.value })}
                             placeholder="Auto-fetched"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white pl-8"
@@ -685,12 +695,12 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Population"
                             fieldKey="population"
-                            currentValue={initialData?.population || ''}
+                            currentValue={initialData?.population ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
                             type="number"
-                            value={initialData?.population || ''}
+                            value={initialData?.population ?? ''}
                             onChange={(e) => onDataChange({ population: e.target.value })}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
@@ -699,13 +709,13 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Population % Change"
                             fieldKey="population_change"
-                            currentValue={initialData?.population_change || ''}
+                            currentValue={initialData?.population_change ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.population_change || ''}
+                                value={initialData?.population_change ?? ''}
                                 onChange={(e) => onDataChange({ population_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -716,13 +726,13 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Poverty Rate"
                             fieldKey="poverty_rate"
-                            currentValue={initialData?.poverty_rate || ''}
+                            currentValue={initialData?.poverty_rate ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.poverty_rate || ''}
+                                value={initialData?.poverty_rate ?? ''}
                                 onChange={(e) => onDataChange({ poverty_rate: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -733,14 +743,14 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Median Household Income"
                             fieldKey="median_household_income"
-                            currentValue={initialData?.median_household_income || ''}
+                            currentValue={initialData?.median_household_income ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-2 text-slate-400">$</span>
                             <Input
                                 type="number"
-                                value={initialData?.median_household_income || ''}
+                                value={initialData?.median_household_income ?? ''}
                                 onChange={(e) => onDataChange({ median_household_income: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pl-7"
                             />
@@ -750,13 +760,13 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Median Household Income % Change"
                             fieldKey="median_household_income_change"
-                            currentValue={initialData?.median_household_income_change || ''}
+                            currentValue={initialData?.median_household_income_change ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.median_household_income_change || ''}
+                                value={initialData?.median_household_income_change ?? ''}
                                 onChange={(e) => onDataChange({ median_household_income_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -767,12 +777,12 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Number of Employees"
                             fieldKey="number_of_employees"
-                            currentValue={initialData?.number_of_employees || ''}
+                            currentValue={initialData?.number_of_employees ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
                             type="number"
-                            value={initialData?.number_of_employees || ''}
+                            value={initialData?.number_of_employees ?? ''}
                             onChange={(e) => onDataChange({ number_of_employees: e.target.value })}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
@@ -781,13 +791,13 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Number of Employees % Change"
                             fieldKey="number_of_employees_change"
-                            currentValue={initialData?.number_of_employees_change || ''}
+                            currentValue={initialData?.number_of_employees_change ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.number_of_employees_change || ''}
+                                value={initialData?.number_of_employees_change ?? ''}
                                 onChange={(e) => onDataChange({ number_of_employees_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -798,14 +808,14 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Median Property Value"
                             fieldKey="median_property_value"
-                            currentValue={initialData?.median_property_value || ''}
+                            currentValue={initialData?.median_property_value ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-2 text-slate-400">$</span>
                             <Input
                                 type="number"
-                                value={initialData?.median_property_value || ''}
+                                value={initialData?.median_property_value ?? ''}
                                 onChange={(e) => onDataChange({ median_property_value: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pl-7"
                             />
@@ -815,13 +825,13 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Median Property Value % Change"
                             fieldKey="median_property_value_change"
-                            currentValue={initialData?.median_property_value_change || ''}
+                            currentValue={initialData?.median_property_value_change ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.median_property_value_change || ''}
+                                value={initialData?.median_property_value_change ?? ''}
                                 onChange={(e) => onDataChange({ median_property_value_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -858,14 +868,14 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="2 BR Rent"
                             fieldKey="two_br_rent"
-                            currentValue={initialData?.two_br_rent || ''}
+                            currentValue={initialData?.two_br_rent ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-2 text-slate-400">$</span>
                             <Input
                                 type="number"
-                                value={initialData?.two_br_rent || ''}
+                                value={initialData?.two_br_rent ?? ''}
                                 onChange={(e) => onDataChange({ two_br_rent: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pl-7"
                             />
@@ -875,11 +885,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="ELI Renter Households"
                             fieldKey="eli_renter_households"
-                            currentValue={initialData?.eli_renter_households || ''}
+                            currentValue={initialData?.eli_renter_households ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.eli_renter_households || ''}
+                            value={initialData?.eli_renter_households ?? ''}
                             onChange={(e) => onDataChange({ eli_renter_households: e.target.value })}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
@@ -888,11 +898,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Units per 100"
                             fieldKey="units_per_100"
-                            currentValue={initialData?.units_per_100 || ''}
+                            currentValue={initialData?.units_per_100 ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.units_per_100 || ''}
+                            value={initialData?.units_per_100 ?? ''}
                             onChange={(e) => onDataChange({ units_per_100: e.target.value })}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
@@ -901,11 +911,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
                         <DiscrepancyLabel
                             label="Total Units"
                             fieldKey="total_units"
-                            currentValue={initialData?.total_units || ''}
+                            currentValue={initialData?.total_units ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.total_units || ''}
+                            value={initialData?.total_units ?? ''}
                             onChange={(e) => onDataChange({ total_units: e.target.value })}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
@@ -937,16 +947,32 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
 
 export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData }) => {
     const hasApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder');
-    const [manualName, setManualName] = React.useState(initialData?.name || '');
-    const [manualAddress, setManualAddress] = React.useState(initialData?.address || '');
+    const [manualName, setManualName] = React.useState(initialData?.name ?? '');
+    const [manualAddress, setManualAddress] = React.useState(initialData?.address ?? '');
     const [attomLoading, setAttomLoading] = React.useState(false);
     const [attomError, setAttomError] = React.useState<string | null>(null);
     const [attomMessage, setAttomMessage] = React.useState<string | null>(null);
     const [showMoreDemographics, setShowMoreDemographics] = React.useState(false);
     const lastAttomAddressRef = React.useRef<string>('');
     const pdfValues = initialData?.pdf_values || {};
+    const defaultValues = initialData?.default_values || {};
     const isEmptyValue = (value: any) =>
         value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+    const normalizeComparable = (value: any) =>
+        String(value ?? '')
+            .toLowerCase()
+            .replace(/[\s-]+/g, '')
+            .trim();
+    const isDefaultValue = (key: string, currentValue: any) =>
+        defaultValues[key] !== undefined &&
+        defaultValues[key] !== null &&
+        defaultValues[key] !== '' &&
+        normalizeComparable(currentValue) === normalizeComparable(defaultValues[key]);
+    const isEmptyOrDefault = (key: string, currentValue: any) =>
+        isEmptyValue(currentValue) || isDefaultValue(key, currentValue);
+    const shouldOverrideWithAttom = (currentValue: any, pdfValue: any, key: string) =>
+        isEmptyOrDefault(key, currentValue) ||
+        normalizeComparable(currentValue) === normalizeComparable(pdfValue);
 
     React.useEffect(() => {
         if (typeof initialData?.mobile_home_park_name === 'string') {
@@ -978,15 +1004,15 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                     setAttomMessage('ATTOM: no results found');
                     const updates: Record<string, any> = {};
                     const pdfParcel = pdfValues.parcel_1 || pdfValues.parcelNumber;
-                    if (isEmptyValue(initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
-                    if (isEmptyValue(initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
-                    if (isEmptyValue(initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
+                    if (isEmptyOrDefault('parcel_1', initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
+                    if (isEmptyOrDefault('parcelNumber', initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
+                    if (isEmptyOrDefault('parcel_1_acreage', initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
                         updates.parcel_1_acreage = pdfValues.parcel_1_acreage;
                     }
-                    if (isEmptyValue(initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
-                    if (isEmptyValue(initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
-                    if (isEmptyValue(initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
-                    if (isEmptyValue(initialData?.last_sale_price) && pdfValues.last_sale_price) {
+                    if (isEmptyOrDefault('acreage', initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
+                    if (isEmptyOrDefault('property_type', initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
+                    if (isEmptyOrDefault('year_built', initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
+                    if (isEmptyOrDefault('last_sale_price', initialData?.last_sale_price) && pdfValues.last_sale_price) {
                         updates.last_sale_price = pdfValues.last_sale_price;
                     }
                     if (Object.keys(updates).length > 0) {
@@ -1002,16 +1028,10 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
             const housing = payload?.housing_crisis_metrics || {};
             const demographicsDetails = payload?.demographics_details || null;
             setAttomMessage(`AI: data found${payload?.source ? ` (${payload.source})` : ''}`);
-            const normalizeComparable = (value: any) =>
-                String(value ?? '')
-                    .toLowerCase()
-                    .replace(/[\s-]+/g, '')
-                    .trim();
-            const shouldOverrideWithAttom = (currentValue: any, pdfValue: any) =>
-                isEmptyValue(currentValue) || normalizeComparable(currentValue) === normalizeComparable(pdfValue);
             const crimeDetails = demographicsDetails?.crime || {};
-            const violentCrimeValue = demographics.violent_crime ?? crimeDetails?.crime_Index ?? crimeDetails?.aggravated_Assault_Index ?? null;
-            const propertyCrimeValue = demographics.property_crime ?? crimeDetails?.motor_Vehicle_Theft_Index ?? null;
+            const violentCrimeValue = crimeDetails?.crime_Index ?? initialData?.crime_Index ?? demographics.violent_crime ?? null;
+            const propertyCrimeValue =
+                crimeDetails?.motor_Vehicle_Theft_Index ?? initialData?.motor_Vehicle_Theft_Index ?? demographics.property_crime ?? null;
             const updates: Record<string, any> = {
                 mobile_home_park_name: manualName || initialData?.mobile_home_park_name,
                 population: demographics.population ?? initialData?.population,
@@ -1033,28 +1053,28 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
             if (demographicsDetails && !initialData?.demographics_details) {
                 updates.demographics_details = demographicsDetails;
             }
-            if (identity.fips_code && isEmptyValue(initialData?.fips_code)) {
+            if (identity.fips_code && isEmptyOrDefault('fips_code', initialData?.fips_code)) {
                 updates.fips_code = identity.fips_code;
             }
-            if (identity.apn && shouldOverrideWithAttom(initialData?.parcelNumber, pdfValues.parcelNumber)) {
+            if (identity.apn && shouldOverrideWithAttom(initialData?.parcelNumber, pdfValues.parcelNumber, 'parcelNumber')) {
                 updates.parcelNumber = identity.apn;
             }
-            if (identity.apn && shouldOverrideWithAttom(initialData?.parcel_1, pdfValues.parcel_1)) {
+            if (identity.apn && shouldOverrideWithAttom(initialData?.parcel_1, pdfValues.parcel_1, 'parcel_1')) {
                 updates.parcel_1 = identity.apn;
             }
-            if (identity.acreage && shouldOverrideWithAttom(initialData?.acreage, pdfValues.acreage)) {
+            if (identity.acreage && shouldOverrideWithAttom(initialData?.acreage, pdfValues.acreage, 'acreage')) {
                 updates.acreage = identity.acreage;
             }
-            if (identity.acreage && shouldOverrideWithAttom(initialData?.parcel_1_acreage, pdfValues.parcel_1_acreage)) {
+            if (identity.acreage && shouldOverrideWithAttom(initialData?.parcel_1_acreage, pdfValues.parcel_1_acreage, 'parcel_1_acreage')) {
                 updates.parcel_1_acreage = identity.acreage;
             }
-            if (identity.year_built && shouldOverrideWithAttom(initialData?.year_built, pdfValues.year_built)) {
+            if (identity.year_built && shouldOverrideWithAttom(initialData?.year_built, pdfValues.year_built, 'year_built')) {
                 updates.year_built = identity.year_built;
             }
-            if (identity.property_type && shouldOverrideWithAttom(initialData?.property_type, pdfValues.property_type)) {
+            if (identity.property_type && shouldOverrideWithAttom(initialData?.property_type, pdfValues.property_type, 'property_type')) {
                 updates.property_type = identity.property_type;
             }
-            if (financials.last_sale_price && shouldOverrideWithAttom(initialData?.last_sale_price, pdfValues.last_sale_price)) {
+            if (financials.last_sale_price && shouldOverrideWithAttom(initialData?.last_sale_price, pdfValues.last_sale_price, 'last_sale_price')) {
                 updates.last_sale_price = financials.last_sale_price;
             }
             onDataChange(updates);
@@ -1063,15 +1083,15 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
             setAttomError(error.message || 'ATTOM request failed');
             const updates: Record<string, any> = {};
             const pdfParcel = pdfValues.parcel_1 || pdfValues.parcelNumber;
-            if (isEmptyValue(initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
-            if (isEmptyValue(initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
-            if (isEmptyValue(initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
+            if (isEmptyOrDefault('parcel_1', initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
+            if (isEmptyOrDefault('parcelNumber', initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
+            if (isEmptyOrDefault('parcel_1_acreage', initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
                 updates.parcel_1_acreage = pdfValues.parcel_1_acreage;
             }
-            if (isEmptyValue(initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
-            if (isEmptyValue(initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
-            if (isEmptyValue(initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
-            if (isEmptyValue(initialData?.last_sale_price) && pdfValues.last_sale_price) {
+            if (isEmptyOrDefault('acreage', initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
+            if (isEmptyOrDefault('property_type', initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
+            if (isEmptyOrDefault('year_built', initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
+            if (isEmptyOrDefault('last_sale_price', initialData?.last_sale_price) && pdfValues.last_sale_price) {
                 updates.last_sale_price = pdfValues.last_sale_price;
             }
             if (Object.keys(updates).length > 0) {
@@ -1185,11 +1205,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="City"
                             fieldKey="city"
-                            currentValue={initialData?.city || ''}
+                            currentValue={initialData?.city ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.city || ''}
+                            value={initialData?.city ?? ''}
                             onChange={(e) => onDataChange({ city: e.target.value })}
                             placeholder="Enter manually"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -1199,11 +1219,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="State"
                             fieldKey="state"
-                            currentValue={initialData?.state || ''}
+                            currentValue={initialData?.state ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.state || ''}
+                            value={initialData?.state ?? ''}
                             onChange={(e) => onDataChange({ state: e.target.value })}
                             placeholder="Enter manually"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -1213,11 +1233,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="County"
                             fieldKey="county"
-                            currentValue={initialData?.county || ''}
+                            currentValue={initialData?.county ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.county || ''}
+                            value={initialData?.county ?? ''}
                             onChange={(e) => onDataChange({ county: e.target.value })}
                             placeholder="Enter manually"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -1227,11 +1247,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Zip Code"
                             fieldKey="zip_code"
-                            currentValue={initialData?.zip_code || ''}
+                            currentValue={initialData?.zip_code ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.zip_code || ''}
+                            value={initialData?.zip_code ?? ''}
                             onChange={(e) => onDataChange({ zip_code: e.target.value })}
                             placeholder="Enter manually"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -1241,11 +1261,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="FIPS Code"
                             fieldKey="fips_code"
-                            currentValue={initialData?.fips_code || ''}
+                            currentValue={initialData?.fips_code ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.fips_code || ''}
+                            value={initialData?.fips_code ?? ''}
                             onChange={(e) => onDataChange({ fips_code: e.target.value })}
                             placeholder="Auto-fetched"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -1255,11 +1275,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Parcel Number"
                             fieldKey="parcel_1"
-                            currentValue={initialData?.parcel_1 || initialData?.parcelNumber || ''}
+                            currentValue={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.parcel_1 || initialData?.parcelNumber || ''}
+                            value={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
                             onChange={(e) => onDataChange({ parcel_1: e.target.value, parcelNumber: e.target.value })}
                             placeholder="Auto-fetched"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -1269,12 +1289,12 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Acreage (Acres)"
                             fieldKey="parcel_1_acreage"
-                            currentValue={initialData?.parcel_1_acreage || initialData?.acreage || ''}
+                            currentValue={(initialData?.parcel_1_acreage ?? '') || (initialData?.acreage ?? '')}
                             pdfValues={pdfValues}
                         />
                         <Input
                             type="number"
-                            value={initialData?.parcel_1_acreage || initialData?.acreage || ''}
+                            value={(initialData?.parcel_1_acreage ?? '') || (initialData?.acreage ?? '')}
                             onChange={(e) => onDataChange({ parcel_1_acreage: e.target.value, acreage: e.target.value })}
                             placeholder="Auto-fetched"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -1284,12 +1304,12 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Year Built"
                             fieldKey="year_built"
-                            currentValue={initialData?.year_built || ''}
+                            currentValue={initialData?.year_built ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
                             type="number"
-                            value={initialData?.year_built || ''}
+                            value={initialData?.year_built ?? ''}
                             onChange={(e) => onDataChange({ year_built: e.target.value })}
                             placeholder="Auto-fetched"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -1299,11 +1319,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Property Type"
                             fieldKey="property_type"
-                            currentValue={initialData?.property_type || ''}
+                            currentValue={initialData?.property_type ?? ''}
                             pdfValues={pdfValues}
                         />
                         <Input
-                            value={initialData?.property_type || ''}
+                            value={initialData?.property_type ?? ''}
                             onChange={(e) => onDataChange({ property_type: e.target.value })}
                             placeholder="Auto-fetched"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
@@ -1313,14 +1333,14 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Last Sale Price"
                             fieldKey="last_sale_price"
-                            currentValue={initialData?.last_sale_price || ''}
+                            currentValue={initialData?.last_sale_price ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-2 text-slate-400">$</span>
                             <Input
                                 type="number"
-                                value={initialData?.last_sale_price || ''}
+                                value={initialData?.last_sale_price ?? ''}
                                 onChange={(e) => onDataChange({ last_sale_price: e.target.value })}
                                 placeholder="Auto-fetched"
                                 className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white pl-8"
@@ -1336,12 +1356,12 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             <DiscrepancyLabel
                                 label="Population"
                                 fieldKey="population"
-                                currentValue={initialData?.population || ''}
+                                currentValue={initialData?.population ?? ''}
                                 pdfValues={pdfValues}
                             />
                         <Input
                             type="number"
-                            value={initialData?.population || ''}
+                            value={initialData?.population ?? ''}
                             onChange={(e) => onDataChange({ population: e.target.value })}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
@@ -1350,13 +1370,13 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Population % Change"
                             fieldKey="population_change"
-                            currentValue={initialData?.population_change || ''}
+                            currentValue={initialData?.population_change ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.population_change || ''}
+                                value={initialData?.population_change ?? ''}
                                 onChange={(e) => onDataChange({ population_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -1367,13 +1387,13 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Poverty Rate"
                             fieldKey="poverty_rate"
-                            currentValue={initialData?.poverty_rate || ''}
+                            currentValue={initialData?.poverty_rate ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.poverty_rate || ''}
+                                value={initialData?.poverty_rate ?? ''}
                                 onChange={(e) => onDataChange({ poverty_rate: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -1384,14 +1404,14 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Median Household Income"
                             fieldKey="median_household_income"
-                            currentValue={initialData?.median_household_income || ''}
+                            currentValue={initialData?.median_household_income ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-2 text-slate-400">$</span>
                             <Input
                                 type="number"
-                                value={initialData?.median_household_income || ''}
+                                value={initialData?.median_household_income ?? ''}
                                 onChange={(e) => onDataChange({ median_household_income: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pl-7"
                             />
@@ -1401,13 +1421,13 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Median Household Income % Change"
                             fieldKey="median_household_income_change"
-                            currentValue={initialData?.median_household_income_change || ''}
+                            currentValue={initialData?.median_household_income_change ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.median_household_income_change || ''}
+                                value={initialData?.median_household_income_change ?? ''}
                                 onChange={(e) => onDataChange({ median_household_income_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -1418,12 +1438,12 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             <DiscrepancyLabel
                                 label="Number of Employees"
                                 fieldKey="number_of_employees"
-                                currentValue={initialData?.number_of_employees || ''}
+                                currentValue={initialData?.number_of_employees ?? ''}
                                 pdfValues={pdfValues}
                             />
                         <Input
                             type="number"
-                            value={initialData?.number_of_employees || ''}
+                            value={initialData?.number_of_employees ?? ''}
                             onChange={(e) => onDataChange({ number_of_employees: e.target.value })}
                             className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                         />
@@ -1432,13 +1452,13 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Number of Employees % Change"
                             fieldKey="number_of_employees_change"
-                            currentValue={initialData?.number_of_employees_change || ''}
+                            currentValue={initialData?.number_of_employees_change ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.number_of_employees_change || ''}
+                                value={initialData?.number_of_employees_change ?? ''}
                                 onChange={(e) => onDataChange({ number_of_employees_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -1449,14 +1469,14 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Median Property Value"
                             fieldKey="median_property_value"
-                            currentValue={initialData?.median_property_value || ''}
+                            currentValue={initialData?.median_property_value ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-2 text-slate-400">$</span>
                             <Input
                                 type="number"
-                                value={initialData?.median_property_value || ''}
+                                value={initialData?.median_property_value ?? ''}
                                 onChange={(e) => onDataChange({ median_property_value: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pl-7"
                             />
@@ -1466,13 +1486,13 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="Median Property Value % Change"
                             fieldKey="median_property_value_change"
-                            currentValue={initialData?.median_property_value_change || ''}
+                            currentValue={initialData?.median_property_value_change ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <Input
                                 type="number"
-                                value={initialData?.median_property_value_change || ''}
+                                value={initialData?.median_property_value_change ?? ''}
                                 onChange={(e) => onDataChange({ median_property_value_change: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pr-8"
                             />
@@ -1509,14 +1529,14 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                         <DiscrepancyLabel
                             label="2 BR Rent"
                             fieldKey="two_br_rent"
-                            currentValue={initialData?.two_br_rent || ''}
+                            currentValue={initialData?.two_br_rent ?? ''}
                             pdfValues={pdfValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-2 text-slate-400">$</span>
                             <Input
                                 type="number"
-                                value={initialData?.two_br_rent || ''}
+                                value={initialData?.two_br_rent ?? ''}
                                 onChange={(e) => onDataChange({ two_br_rent: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent pl-7"
                             />
@@ -1526,11 +1546,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             <DiscrepancyLabel
                                 label="ELI Renter Households"
                                 fieldKey="eli_renter_households"
-                                currentValue={initialData?.eli_renter_households || ''}
+                                currentValue={initialData?.eli_renter_households ?? ''}
                                 pdfValues={pdfValues}
                             />
                             <Input
-                                value={initialData?.eli_renter_households || ''}
+                                value={initialData?.eli_renter_households ?? ''}
                                 onChange={(e) => onDataChange({ eli_renter_households: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                             />
@@ -1539,11 +1559,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             <DiscrepancyLabel
                                 label="Units per 100"
                                 fieldKey="units_per_100"
-                                currentValue={initialData?.units_per_100 || ''}
+                                currentValue={initialData?.units_per_100 ?? ''}
                                 pdfValues={pdfValues}
                             />
                             <Input
-                                value={initialData?.units_per_100 || ''}
+                                value={initialData?.units_per_100 ?? ''}
                                 onChange={(e) => onDataChange({ units_per_100: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                             />
@@ -1552,11 +1572,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
                             <DiscrepancyLabel
                                 label="Total Units"
                                 fieldKey="total_units"
-                                currentValue={initialData?.total_units || ''}
+                                currentValue={initialData?.total_units ?? ''}
                                 pdfValues={pdfValues}
                             />
                             <Input
-                                value={initialData?.total_units || ''}
+                                value={initialData?.total_units ?? ''}
                                 onChange={(e) => onDataChange({ total_units: e.target.value })}
                                 className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
                             />
