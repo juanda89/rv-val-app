@@ -7,6 +7,7 @@ type UploadStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface ValuationUploadPanelProps {
     onAutofill: (data: Record<string, any>) => Promise<void> | void;
+    onBusyChange?: (busy: boolean) => void;
 }
 
 const SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf'];
@@ -15,12 +16,17 @@ const STORAGE_BUCKET = 'valuation-uploads';
 const sanitizeFileName = (name: string) =>
     name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
 
-export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAutofill }) => {
+export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAutofill, onBusyChange }) => {
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [status, setStatus] = useState<UploadStatus>('idle');
     const [message, setMessage] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [fileName, setFileName] = useState('');
+
+    React.useEffect(() => {
+        onBusyChange?.(status === 'loading');
+        return () => onBusyChange?.(false);
+    }, [status, onBusyChange]);
 
     const reset = () => {
         setStatus('idle');

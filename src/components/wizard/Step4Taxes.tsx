@@ -9,6 +9,7 @@ interface Step4Props {
     onDataChange: (data: any) => void;
     initialData?: any;
     address?: string;
+    onBusyChange?: (busy: boolean) => void;
 }
 
 const formatThousands = (value: string | number) => {
@@ -22,7 +23,7 @@ const formatThousands = (value: string | number) => {
 
 const normalizeCurrencyInput = (value: string) => value.replace(/[^\d.]/g, '');
 
-export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, address }) => {
+export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, address, onBusyChange }) => {
     const pdfValues = initialData?.pdf_values || {};
     const hasParcel = Boolean(initialData?.parcelNumber || initialData?.parcel_1);
     const canFetchAttom = Boolean(address || hasParcel);
@@ -52,6 +53,11 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        onBusyChange?.(loading);
+        return () => onBusyChange?.(false);
+    }, [loading, onBusyChange]);
 
     useEffect(() => {
         // Sync data changes

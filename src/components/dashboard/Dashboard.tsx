@@ -111,12 +111,14 @@ const StackedBarChart = ({
     title,
     labels,
     series,
-    caption
+    caption,
+    formatValue
 }: {
     title: string;
     labels: string[];
     series: LineSeries[];
     caption?: string;
+    formatValue?: (value: number) => string;
 }) => {
     const totals = labels.map((_, idx) =>
         series.reduce((sum, line) => sum + (line.values[idx] ?? 0), 0)
@@ -147,6 +149,7 @@ const StackedBarChart = ({
                                             key={`${line.label}-${label}`}
                                             className="w-full"
                                             style={{ height: `${height}%`, backgroundColor: line.color }}
+                                            title={`${line.label} ${label}: ${formatValue ? formatValue(value) : value}`}
                                         />
                                     );
                                 })}
@@ -300,7 +303,7 @@ const PnlComparisonTable = ({
             <div className="px-5 py-4 border-b border-slate-200 dark:border-white/5 flex flex-wrap gap-3 items-center justify-between">
                 <div>
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
-                    <p className="text-xs text-slate-500 dark:text-[#92a4c9]">Est. T12 vs RR/RE income & expenses</p>
+                    <p className="text-xs text-slate-500 dark:text-[#92a4c9]">Historical T-12 P&amp;L vs RR/RE income &amp; expenses</p>
                 </div>
                 {lotCount ? (
                     <span className="text-xs font-semibold text-slate-600 dark:text-[#92a4c9]">
@@ -313,7 +316,7 @@ const PnlComparisonTable = ({
                     <thead className="bg-slate-50 dark:bg-[#1a2434] text-slate-500 dark:text-[#92a4c9] uppercase text-[11px]">
                         <tr>
                             <th className="px-5 py-3 text-left font-semibold">Category</th>
-                            <th className="px-5 py-3 text-right font-semibold">Est. T12</th>
+                            <th className="px-5 py-3 text-right font-semibold">Historical T-12 P&amp;L</th>
                             <th className="px-5 py-3 text-right font-semibold">RR</th>
                             <th className="px-5 py-3 text-right font-semibold">RE</th>
                             <th className="px-5 py-3 text-right font-semibold">Per lot</th>
@@ -765,22 +768,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
         [outputs]
     );
 
-    const rentSeries = useMemo(() => buildSeries('Rent_Year_', 5, 1, false), [outputs]);
-    const noiSeries = useMemo(() => buildSeries('NOI_Year_', 5, 1, false), [outputs]);
-    const taxesSeries = useMemo(() => buildSeries('Taxes_Year_', 6, 0, false), [outputs]);
     const occupancySeries = useMemo(() => buildSeries('Occupancy_Year_', 5, 1, true), [outputs]);
     const roeSeries = useMemo(() => buildSeries('ROE_Year_', 5, 1, true), [outputs]);
 
-    const rentNoiTaxesSeries = useMemo<LineSeries[]>(() => {
-        const rentValues = [0, ...rentSeries.map((item) => item.value)];
-        const noiValues = [0, ...noiSeries.map((item) => item.value)];
-        const taxesValues = taxesSeries.map((item) => item.value);
-        return [
-            { label: 'Rent', values: rentValues, color: '#2b6cee', softColor: 'rgba(43, 108, 238, 0.15)' },
-            { label: 'NOI', values: noiValues, color: '#10b981', softColor: 'rgba(16, 185, 129, 0.15)' },
-            { label: 'Taxes', values: taxesValues, color: '#f59e0b', softColor: 'rgba(245, 158, 11, 0.15)' },
-        ];
-    }, [rentSeries, noiSeries, taxesSeries]);
+    const buildOutputValues = (prefix: string, count: number) =>
+        Array.from({ length: count }, (_, idx) => getOutputNumber(`${prefix}${idx + 1}`) ?? 0);
+
+    const revenueYears = useMemo(() => buildOutputValues('revenue_Year_', 5), [outputs]);
+    const expenseYears = useMemo(() => buildOutputValues('Income_Year_', 5), [outputs]);
+    const noiYears = useMemo(() => buildOutputValues('NOI_Year_', 5), [outputs]);
+    const historicalRevenue = pnlData.totals.incomeHistorical ?? 0;
+    const historicalExpenses = pnlData.totals.expenseHistorical ?? 0;
+    const historicalNoi = pnlData.totals.noiHistorical ?? 0;
+    const revenueExpenseNoiSeries = useMemo<LineSeries[]>(
+        () => [
+            { label: 'Revenue', values: [historicalRevenue, ...revenueYears], color: '#2b6cee', softColor: 'rgba(43, 108, 238, 0.15)' },
+            { label: 'Expenses', values: [historicalExpenses, ...expenseYears], color: '#f97316', softColor: 'rgba(249, 115, 22, 0.15)' },
+            { label: 'NOI', values: [historicalNoi, ...noiYears], color: '#10b981', softColor: 'rgba(16, 185, 129, 0.15)' },
+        ],
+        [historicalRevenue, historicalExpenses, historicalNoi, revenueYears, expenseYears, noiYears]
+    );
 
     const exitMetrics: MetricItem[] = useMemo(
         () => [
@@ -1066,10 +1073,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <StackedBarChart
-                        title="Rent, NOI & Taxes"
-                        caption="Stacked totals by year"
+                        title="Revenue, Expenses & NOI"
+                        caption="Y0 reflects Historical T-12 P&L"
                         labels={['Y0', 'Y1', 'Y2', 'Y3', 'Y4', 'Y5']}
-                        series={rentNoiTaxesSeries}
+                        series={revenueExpenseNoiSeries}
+                        formatValue={fmtCurrency}
                     />
                     <DualAxisLineChart
                         title="Occupancy & ROE"

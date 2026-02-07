@@ -25,6 +25,7 @@ interface Step3Props {
     onDataChange: (data: any) => void;
     initialData?: any;
     projectId?: string | null;
+    onBusyChange?: (busy: boolean) => void;
 }
 
 const createId = () => {
@@ -113,7 +114,7 @@ const CATEGORY_LABELS: Record<string, string> = {
     reserves: 'Reserves',
 };
 
-export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, projectId }) => {
+export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, projectId, onBusyChange }) => {
     const [incomeItems, setIncomeItems] = useState<PnlItem[]>(() =>
         normalizeItems(initialData?.pnl_income_items || initialData?.income_items || [])
     );
@@ -143,6 +144,15 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
     const [syncMessage, setSyncMessage] = useState('');
     const [groupedSyncStatus, setGroupedSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
     const [groupedSyncMessage, setGroupedSyncMessage] = useState('');
+
+    React.useEffect(() => {
+        const isBusy =
+            groupingStatus === 'loading' ||
+            syncStatus === 'syncing' ||
+            groupedSyncStatus === 'syncing';
+        onBusyChange?.(isBusy);
+        return () => onBusyChange?.(false);
+    }, [groupingStatus, syncStatus, groupedSyncStatus, onBusyChange]);
     const initialDataSignatureRef = useRef<string>('');
     const localSignatureRef = useRef<string>('');
     const skipSyncRef = useRef(true);

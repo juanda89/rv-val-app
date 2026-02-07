@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Step1Location } from './Step1Location';
 import { Step2RentRoll } from './Step2RentRoll';
 import { Step3PnL } from './Step3PnL';
@@ -45,6 +45,11 @@ export const WizardLayout = ({
     const [projectId, setProjectId] = useState<string | null>(initialProjectId || null);
     const [creatingProject, setCreatingProject] = useState(false);
     const [nextSyncing, setNextSyncing] = useState(false);
+    const [busyStates, setBusyStates] = useState<Record<string, boolean>>({});
+    const setBusyState = React.useCallback((key: string, value: boolean) => {
+        setBusyStates((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
+    }, []);
+    const isExternalBusy = useMemo(() => Object.values(busyStates).some(Boolean), [busyStates]);
     const [refreshingOutputs, setRefreshingOutputs] = useState(false);
     const { sync, isSyncing } = useSheetSync(projectId || '');
     const pendingSyncRef = useRef<Record<string, any>>({});
@@ -681,7 +686,12 @@ export const WizardLayout = ({
             </div>
 
             <div className="flex-1 flex flex-col lg:flex-row">
-                {currentStep !== 6 && <ValuationUploadPanel onAutofill={handleAutofill} />}
+                {currentStep !== 6 && (
+                    <ValuationUploadPanel
+                        onAutofill={handleAutofill}
+                        onBusyChange={(busy) => setBusyState('upload', busy)}
+                    />
+                )}
 
                 {/* Main Content */}
                 <div className="flex-1 flex flex-col">
@@ -703,22 +713,50 @@ export const WizardLayout = ({
                                         currentStep === STEPS.length ||
                                         (!projectId && currentStep === 1 && !formData.address) ||
                                         (pnlGateBlocked && currentStep >= 3) ||
+                                        creatingProject ||
                                         nextSyncing ||
-                                        isSyncing
+                                        isSyncing ||
+                                        isExternalBusy
                                     }
                                 >
-                                    {creatingProject ? "Creating..." : nextSyncing || isSyncing ? "Syncing..." : "Next"}
+                                    {creatingProject
+                                        ? "Creating..."
+                                        : nextSyncing || isSyncing
+                                            ? "Syncing..."
+                                            : isExternalBusy
+                                                ? "Working..."
+                                                : "Next"}
                                 </Button>
                             )}
                         </div>
                     </header>
 
                     <main className="flex-1 p-8 max-w-4xl mx-auto w-full">
-                        {currentStep === 1 && <Step1Location onDataChange={handleDataChange} initialData={formData} />}
+                        {currentStep === 1 && (
+                            <Step1Location
+                                onDataChange={handleDataChange}
+                                initialData={formData}
+                                onBusyChange={(busy) => setBusyState('attom', busy)}
+                            />
+                        )}
                         {currentStep === 2 && <Step2RentRoll onDataChange={handleDataChange} initialData={formData} />}
-                        {currentStep === 3 && <Step3PnL onDataChange={handleDataChange} initialData={formData} projectId={projectId} />}
+                        {currentStep === 3 && (
+                            <Step3PnL
+                                onDataChange={handleDataChange}
+                                initialData={formData}
+                                projectId={projectId}
+                                onBusyChange={(busy) => setBusyState('pnl', busy)}
+                            />
+                        )}
                         {currentStep === 4 && <Step4Acquisition onDataChange={handleDataChange} initialData={formData} />}
-                        {currentStep === 5 && <Step4Taxes onDataChange={handleDataChange} initialData={formData} address={formData.address} />}
+                        {currentStep === 5 && (
+                            <Step4Taxes
+                                onDataChange={handleDataChange}
+                                initialData={formData}
+                                address={formData.address}
+                                onBusyChange={(busy) => setBusyState('taxes', busy)}
+                            />
+                        )}
                         {currentStep === 6 && (
                             <Dashboard
                                 outputs={outputs}

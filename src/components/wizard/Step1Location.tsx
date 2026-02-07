@@ -12,6 +12,7 @@ import { DiscrepancyLabel } from "@/components/ui/DiscrepancyLabel";
 interface Step1Props {
     onDataChange: (data: any) => void;
     initialData?: any;
+    onBusyChange?: (busy: boolean) => void;
 }
 
 const friendlyLabel = (value: string) => {
@@ -140,7 +141,7 @@ const extractStateFromGeocode = (result: any) => {
     );
 };
 
-const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
+const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Props) => {
     const {
         ready,
         value,
@@ -192,6 +193,11 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
             setCoordinates({ lat: initialData.lat, lng: initialData.lng });
         }
     }, [initialData?.mobile_home_park_name, initialData?.name, initialData?.mobile_home_park_address, initialData?.address, initialData?.lat, initialData?.lng, setValue]);
+
+    React.useEffect(() => {
+        onBusyChange?.(attomLoading);
+        return () => onBusyChange?.(false);
+    }, [attomLoading, onBusyChange]);
 
     React.useEffect(() => {
         const address = initialData?.address;
@@ -945,7 +951,7 @@ const GooglePlacesInput = ({ onDataChange, initialData }: Step1Props) => {
     );
 };
 
-export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData }) => {
+export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData, onBusyChange }) => {
     const hasApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder');
     const [manualName, setManualName] = React.useState(initialData?.name ?? '');
     const [manualAddress, setManualAddress] = React.useState(initialData?.address ?? '');
@@ -986,6 +992,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
             setManualAddress(initialData.address);
         }
     }, [initialData?.mobile_home_park_name, initialData?.name, initialData?.mobile_home_park_address, initialData?.address]);
+
+    React.useEffect(() => {
+        onBusyChange?.(attomLoading);
+        return () => onBusyChange?.(false);
+    }, [attomLoading, onBusyChange]);
 
     const fetchAttomData = async () => {
         if (!manualAddress) return;
@@ -1606,5 +1617,5 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData 
         );
     }
 
-    return <GooglePlacesInput onDataChange={onDataChange} initialData={initialData} />;
+    return <GooglePlacesInput onDataChange={onDataChange} initialData={initialData} onBusyChange={onBusyChange} />;
 };
