@@ -144,7 +144,11 @@ const StackedBarChart = ({
                                 {series.slice().reverse().map((line) => {
                                     const value = line.values[idx] ?? 0;
                                     const height = Math.max((value / maxTotal) * 100, 0);
-                                    const tooltipText = `${line.label} ${label}: ${formatValue ? formatValue(value) : value}`;
+                                    const displayValue =
+                                        line.label.toLowerCase() === 'expenses'
+                                            ? -Math.abs(value)
+                                            : value;
+                                    const tooltipText = `${line.label} ${label}: ${formatValue ? formatValue(displayValue) : displayValue}`;
                                     return (
                                         <div
                                             key={`${line.label}-${label}`}
@@ -775,8 +779,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         Array.from({ length: count }, (_, idx) => getOutputNumber(`${prefix}${idx + 1}`) ?? 0);
 
     const revenueYears = useMemo(() => buildOutputValues('revenue_Year_', 5), [outputs]);
-    const expenseYears = useMemo(() => buildOutputValues('Income_Year_', 5), [outputs]);
-    const noiYears = useMemo(() => buildOutputValues('NOI_Year_', 5), [outputs]);
+    const expenseYears = useMemo(() => buildOutputValues('expenses_Year_', 5), [outputs]);
+    const noiYears = useMemo(() => buildOutputValues('noi_Year_', 5), [outputs]);
     const historicalRevenue = pnlData.totals.incomeHistorical ?? 0;
     const historicalExpenses = pnlData.totals.expenseHistorical ?? 0;
     const historicalNoi = pnlData.totals.noiHistorical ?? 0;

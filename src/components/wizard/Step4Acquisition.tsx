@@ -11,6 +11,10 @@ interface Step4Props {
 
 export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialData }) => {
     const pdfValues = initialData?.pdf_values || {};
+    const normalizePercentInput = (value: any) => {
+        if (value === null || value === undefined || value === '') return '';
+        return String(value).replace('%', '').trim();
+    };
     const normalizeYesNo = (value: any) => {
         if (value === null || value === undefined || value === '') return '';
         const normalized = String(value).trim().toUpperCase();
@@ -23,6 +27,11 @@ export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialDa
         if (normalized === 'YES') return 'Yes';
         if (normalized === 'NO') return 'No';
         return value ?? '';
+    };
+    const toPercentForSync = (value: string) => {
+        const trimmed = value.trim();
+        if (!trimmed) return '';
+        return trimmed.endsWith('%') ? trimmed : `${trimmed}%`;
     };
     const [inputs, setInputs] = useState({
         appraisal: initialData?.appraisal ?? '',
@@ -48,7 +57,7 @@ export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialDa
         management_fee: initialData?.management_fee ?? '',
         monthly_min_management_fee: initialData?.monthly_min_management_fee ?? '',
         full_whammy_tax_bump: toTitleYesNo(initialData?.full_whammy_tax_bump),
-        year_1_tax_increase: initialData?.year_1_tax_increase ?? '',
+        year_1_tax_increase: normalizePercentInput(initialData?.year_1_tax_increase),
         property_manager_salary: initialData?.property_manager_salary ?? '',
         assistant_property_manager_salary: initialData?.assistant_property_manager_salary ?? '',
         maintenance_man_salary: initialData?.maintenance_man_salary ?? '',
@@ -59,7 +68,10 @@ export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialDa
     });
 
     useEffect(() => {
-        onDataChange(inputs);
+        onDataChange({
+            ...inputs,
+            year_1_tax_increase: toPercentForSync(inputs.year_1_tax_increase),
+        });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [inputs]);
 
@@ -88,7 +100,7 @@ export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialDa
             management_fee: initialData?.management_fee ?? '',
             monthly_min_management_fee: initialData?.monthly_min_management_fee ?? '',
             full_whammy_tax_bump: toTitleYesNo(initialData?.full_whammy_tax_bump),
-            year_1_tax_increase: initialData?.year_1_tax_increase ?? '',
+            year_1_tax_increase: normalizePercentInput(initialData?.year_1_tax_increase),
             property_manager_salary: initialData?.property_manager_salary ?? '',
             assistant_property_manager_salary: initialData?.assistant_property_manager_salary ?? '',
             maintenance_man_salary: initialData?.maintenance_man_salary ?? '',
@@ -212,7 +224,14 @@ export const Step4Acquisition: React.FC<Step4Props> = ({ onDataChange, initialDa
                         </div>
                     </div>
                     {whammyValue === 'NO' && (
-                        <InputField label="Year 1 Tax Increase" value={inputs.year_1_tax_increase} onChange={handleChange} field="year_1_tax_increase" pdfValues={pdfValues} />
+                        <InputField
+                            label="Year 1 Tax Increase"
+                            value={inputs.year_1_tax_increase}
+                            onChange={handleChange}
+                            field="year_1_tax_increase"
+                            pdfValues={pdfValues}
+                            isPercent
+                        />
                     )}
                 </div>
             </div>
@@ -240,12 +259,14 @@ const InputField = ({
     onChange,
     field,
     pdfValues,
+    isPercent = false,
 }: {
     label: string;
     value: string;
     onChange: (field: string, value: string) => void;
     field: string;
     pdfValues?: Record<string, any>;
+    isPercent?: boolean;
 }) => (
     <div>
         <DiscrepancyLabel
@@ -254,10 +275,22 @@ const InputField = ({
             currentValue={value}
             pdfValues={pdfValues}
         />
-        <Input
-            value={value}
-            onChange={(e) => onChange(field, e.target.value)}
-            className="bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent"
-        />
+        <div className="relative">
+            <Input
+                value={value}
+                onChange={(e) => {
+                    const nextValue = isPercent
+                        ? e.target.value.replace('%', '').trim()
+                        : e.target.value;
+                    onChange(field, nextValue);
+                }}
+                className={`bg-white dark:bg-[#283339] text-slate-900 dark:text-white border border-slate-300 dark:border-transparent ${isPercent ? 'pr-8' : ''}`}
+            />
+            {isPercent && (
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 dark:text-slate-400 text-sm">
+                    %
+                </span>
+            )}
+        </div>
     </div>
 );

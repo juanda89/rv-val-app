@@ -640,7 +640,59 @@ export async function POST(req: Request) {
         let property: any = null;
         let source = 'address';
 
-        if (apn && fips) {
+        if (lat !== undefined && lng !== undefined) {
+            const geoFallback = await fetchSnapshotByGeo(Number(lat), Number(lng));
+            response = geoFallback.response;
+            payload = geoFallback.payload;
+            property = await selectBestProperty(extractProperties(payload), selectionContext);
+            source = 'geo_snapshot';
+
+            if (property) {
+                const geoApnRaw =
+                    property?.identifier?.apn ||
+                    property?.identifier?.apnOrig ||
+                    property?.identifier?.parcelId ||
+                    apn;
+                const geoFipsRaw = extractFips(property) || fips;
+                const geoApn = geoApnRaw ? String(geoApnRaw).trim().replace(/\s+/g, '') : null;
+                const geoFips = geoFipsRaw ? String(geoFipsRaw).trim().replace(/\s+/g, '') : null;
+
+                if (geoApn && geoFips) {
+                    const parcelFromGeo = await fetchExpandedByParcel(geoApn, geoFips);
+                    if (parcelFromGeo.response.ok) {
+                        const parcelProperty = await selectBestProperty(
+                            extractProperties(parcelFromGeo.payload),
+                            selectionContext
+                        );
+                        if (parcelProperty) {
+                            payload = parcelFromGeo.payload;
+                            response = parcelFromGeo.response;
+                            property = {
+                                ...property,
+                                ...parcelProperty,
+                                address: {
+                                    ...(property?.address || {}),
+                                    ...(parcelProperty?.address || {}),
+                                },
+                                summary: {
+                                    ...(property?.summary || {}),
+                                    ...(parcelProperty?.summary || {}),
+                                },
+                                lot: {
+                                    ...(property?.lot || {}),
+                                    ...(parcelProperty?.lot || {}),
+                                },
+                                assessment: parcelProperty?.assessment || property?.assessment,
+                                tax: parcelProperty?.tax || property?.tax,
+                            };
+                            source = 'geo_snapshot_parcel_fips';
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!property && apn && fips) {
             const parcelResponse = await fetchExpandedByParcel(apn, fips);
             if (parcelResponse.response.ok) {
                 payload = parcelResponse.payload;
@@ -675,14 +727,6 @@ export async function POST(req: Request) {
                     source = 'normalized_address';
                 }
             }
-        }
-
-        if (!property && lat !== undefined && lng !== undefined) {
-            const geoFallback = await fetchSnapshotByGeo(Number(lat), Number(lng));
-            response = geoFallback.response;
-            payload = geoFallback.payload;
-            property = await selectBestProperty(extractProperties(payload), selectionContext);
-            source = 'geo_snapshot';
         }
 
         if (response && !response.ok) {
