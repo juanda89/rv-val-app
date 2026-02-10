@@ -428,31 +428,40 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
         clearSuggestions();
 
         try {
-            const coords = await geocodeAddress(address);
-            void fetchAttomData(address, coords || undefined);
+            await geocodeAddress(address);
         } catch (error) {
             console.error("Error: ", error);
         }
     };
 
-    const handleManualAddress = async () => {
+    const handleAddressSync = async () => {
         if (!value) return;
         try {
-            const coords = await geocodeAddress(value);
-            void fetchAttomData(value, coords || undefined);
+            await geocodeAddress(value);
         } catch (error) {
             console.error("Error: ", error);
         }
     };
-    
+
+    const handleAutoFillClick = async () => {
+        if (!value) return;
+        try {
+            const coords = await geocodeAddress(value);
+            await fetchAttomData(value, coords || undefined);
+        } catch (error) {
+            console.error("Error: ", error);
+        }
+    };
+
     React.useEffect(() => {
         const address = initialData?.address;
-        if (!address || attomLoading) return;
+        if (!address || attomLoading || initialData?.attom_initial_autofill_done) return;
         const key = `${address}-${coordinates?.lat ?? ''}-${coordinates?.lng ?? ''}`;
         if (lastAttomAddressRef.current === key) return;
         lastAttomAddressRef.current = key;
+        onDataChange({ attom_initial_autofill_done: true });
         void fetchAttomData(address, coordinates || undefined);
-    }, [initialData?.address, attomLoading, coordinates]);
+    }, [initialData?.address, initialData?.attom_initial_autofill_done, attomLoading, coordinates, onDataChange]);
 
     return (
         <div className="space-y-6">
@@ -493,7 +502,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         className="mb-0"
                     />
                     <Button
-                        onClick={handleManualAddress}
+                        onClick={handleAutoFillClick}
                         disabled={attomLoading || !value}
                         variant="outline"
                         className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
@@ -505,7 +514,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                     <Input
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
-                        onBlur={handleManualAddress}
+                        onBlur={handleAddressSync}
                         disabled={!ready}
                         placeholder="Search address..."
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white focus:ring-blue-500"
@@ -969,7 +978,6 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
     const [attomError, setAttomError] = React.useState<string | null>(null);
     const [attomMessage, setAttomMessage] = React.useState<string | null>(null);
     const [showMoreDemographics, setShowMoreDemographics] = React.useState(false);
-    const lastAttomAddressRef = React.useRef<string>('');
     const pdfValues = initialData?.pdf_values || {};
     const defaultValues = initialData?.default_values || {};
     const isEmptyValue = (value: any) =>
@@ -1148,17 +1156,6 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
         }
     };
     
-    React.useEffect(() => {
-        if (!manualAddress || attomLoading) return;
-        if (!manualAddress.includes(',') || manualAddress.length < 8) return;
-        if (lastAttomAddressRef.current === manualAddress) return;
-        lastAttomAddressRef.current = manualAddress;
-        const timer = setTimeout(() => {
-            void fetchAttomData();
-        }, 700);
-        return () => clearTimeout(timer);
-    }, [manualAddress, attomLoading]);
-
     if (!hasApiKey) {
         return (
             <div className="space-y-6">
