@@ -15,6 +15,11 @@ export default function AuthCallbackPage() {
             const params = new URLSearchParams(window.location.search);
             const error = params.get('error');
             const code = params.get('code');
+            const hash = window.location.hash.startsWith('#')
+                ? new URLSearchParams(window.location.hash.slice(1))
+                : null;
+            const accessToken = hash?.get('access_token') || null;
+            const refreshToken = hash?.get('refresh_token') || null;
 
             if (error) {
                 router.replace('/login?error=oauth_failed');
@@ -30,22 +35,45 @@ export default function AuthCallbackPage() {
                 }
             }
 
+            if (accessToken && refreshToken) {
+                const { error: sessionError } = await supabase.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken,
+                });
+                if (sessionError) {
+                    console.error('OAuth session set failed:', sessionError.message);
+                    router.replace('/login?error=oauth_failed');
+                    return;
+                }
+            }
+
             const { data: { session } } = await supabase.auth.getSession();
             if (session && isActive) {
                 router.replace('/valuations');
+                return;
             }
+
+            router.replace('/login?error=oauth_failed');
         };
 
         void finalizeLogin();
 
+        const timeoutId = window.setTimeout(() => {
+            if (isActive) {
+                router.replace('/login?error=oauth_timeout');
+            }
+        }, 12000);
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session && isActive) {
+                window.clearTimeout(timeoutId);
                 router.replace('/valuations');
             }
         });
 
         return () => {
             isActive = false;
+            window.clearTimeout(timeoutId);
             subscription.unsubscribe();
         };
     }, [router]);
