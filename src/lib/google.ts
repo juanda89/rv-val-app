@@ -27,6 +27,84 @@ export const getDriveClient = async () => {
     return google.drive({ version: 'v3', auth });
 };
 
+export const getOAuthClientFromEnv = async (req?: Request) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+    const refreshToken = process.env.GOOGLE_REFRESH_TOKEN?.trim();
+
+    if (!clientId || !clientSecret || !refreshToken) {
+        throw new Error('Google OAuth credentials not configured');
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : req ? new URL(req.url).origin : 'http://localhost:3000');
+    const redirectUri = `${baseUrl}/api/auth/google/callback`;
+
+    const oauth2Client = new google.auth.OAuth2(
+        clientId,
+        clientSecret,
+        redirectUri
+    );
+
+    oauth2Client.setCredentials({
+        refresh_token: refreshToken,
+    });
+
+    // Force token refresh validation here so routes can fail early and explicitly.
+    await oauth2Client.getAccessToken();
+    return oauth2Client;
+};
+
+export const getDriveClientWithEnvOAuth = async (req?: Request) => {
+    const oauthClient = await getOAuthClientFromEnv(req);
+    return google.drive({ version: 'v3', auth: oauthClient });
+};
+
+export const getFileMetadata = async (fileId: string) => {
+    const drive = await getDriveClient();
+    const response = await drive.files.get({
+        fileId,
+        supportsAllDrives: true,
+        fields: 'id,name,driveId,mimeType',
+    });
+    return response.data;
+};
+
+export const getFolderMetadata = async (folderId: string) => {
+    const drive = await getDriveClient();
+    const response = await drive.files.get({
+        fileId: folderId,
+        supportsAllDrives: true,
+        fields: 'id,name,driveId,mimeType,capabilities(canAddChildren)',
+    });
+    return response.data;
+};
+
+export const copyFileToFolder = async ({
+    sourceFileId,
+    targetFolderId,
+    name,
+    mimeType = 'application/vnd.google-apps.spreadsheet',
+}: {
+    sourceFileId: string;
+    targetFolderId: string;
+    name: string;
+    mimeType?: string;
+}) => {
+    const drive = await getDriveClient();
+    const response = await drive.files.copy({
+        fileId: sourceFileId,
+        supportsAllDrives: true,
+        fields: 'id,name,driveId',
+        requestBody: {
+            name,
+            mimeType,
+            parents: [targetFolderId],
+        },
+    });
+    return response.data;
+};
+
 export const getDriveClientWithOAuth = (accessToken: string, refreshToken?: string) => {
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ||
         (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');

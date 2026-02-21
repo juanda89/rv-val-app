@@ -27,11 +27,14 @@ export default function AuthCallbackPage() {
             }
 
             if (code) {
-                const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(window.location.href);
+                const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
                 if (exchangeError) {
-                    console.error('OAuth exchange failed:', exchangeError.message);
-                    router.replace('/login?error=oauth_failed');
-                    return;
+                    // In some browsers/environments PKCE storage may be lost; fallback to hash token flow if present.
+                    if (!(accessToken && refreshToken)) {
+                        console.error('OAuth exchange failed:', exchangeError.message);
+                        router.replace('/login?error=oauth_failed');
+                        return;
+                    }
                 }
             }
 

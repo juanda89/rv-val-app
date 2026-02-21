@@ -48,6 +48,15 @@ type PnlAssignment = {
     category: string;
 };
 
+type PnlComparisonRow = {
+    label: string;
+    historical: number | null;
+    rr: number | null;
+    re: number | null;
+    perLot: number | null;
+    format: 'currency' | 'percent' | 'number';
+};
+
 const normalizeLabel = (label: string) =>
     label
         .toLowerCase()
@@ -98,7 +107,13 @@ const MetricPanel = ({
                     }`}
                 >
                     <span>{item.displayLabel}</span>
-                    <span className="text-slate-900 dark:text-white font-semibold">
+                    <span
+                        className={`font-semibold ${
+                            item.value !== null && item.value < 0
+                                ? 'text-red-600 dark:text-red-400'
+                                : 'text-slate-900 dark:text-white'
+                        }`}
+                    >
                         {formatValue(item.value, item.format)}
                     </span>
                 </div>
@@ -152,14 +167,10 @@ const StackedBarChart = ({
                                     return (
                                         <div
                                             key={`${line.label}-${label}`}
-                                            className="w-full relative group"
+                                            className="w-full"
                                             style={{ height: `${height}%`, backgroundColor: line.color }}
                                             title={tooltipText}
-                                        >
-                                            <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 -top-8 whitespace-nowrap rounded-md bg-slate-900/90 px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 z-20 shadow-lg">
-                                                {tooltipText}
-                                            </span>
-                                        </div>
+                                        />
                                     );
                                 })}
                             </div>
@@ -286,25 +297,39 @@ const PnlComparisonTable = ({
     incomeRows,
     expenseRows,
     totals,
-    formatCurrency,
+    summaryRows,
+    formatValue,
 }: {
     title: string;
     lotCount: number | null;
-    incomeRows: { label: string; historical: number; grouped: number }[];
-    expenseRows: { label: string; historical: number; grouped: number }[];
+    incomeRows: PnlComparisonRow[];
+    expenseRows: PnlComparisonRow[];
     totals: {
-        incomeHistorical: number;
-        incomeGrouped: number;
-        expenseHistorical: number;
-        expenseGrouped: number;
-        noiHistorical: number;
-        noiGrouped: number;
+        income: PnlComparisonRow;
+        expenses: PnlComparisonRow;
+        noi: PnlComparisonRow;
     };
-    formatCurrency: (value: number) => string;
+    summaryRows: PnlComparisonRow[];
+    formatValue: (value: number | null, format: MetricItem['format']) => string;
 }) => {
-    const formatLot = (value: number) => {
-        if (!lotCount || lotCount <= 0) return '-';
-        return formatCurrency(value / lotCount);
+    const renderValue = (value: number | null, format: PnlComparisonRow['format']) => {
+        if (value === null || value === undefined) return { text: '-', negative: false };
+        return { text: formatValue(value, format), negative: value < 0 };
+    };
+
+    const renderCell = (value: number | null, format: PnlComparisonRow['format']) => {
+        const rendered = renderValue(value, format);
+        return (
+            <span className={rendered.negative ? 'text-red-600 dark:text-red-400' : ''}>
+                {rendered.text}
+            </span>
+        );
+    };
+
+    const resolvePerLot = (row: PnlComparisonRow) => {
+        if (row.perLot !== null && row.perLot !== undefined) return row.perLot;
+        if (!lotCount || lotCount <= 0 || row.re === null || row.re === undefined) return null;
+        return row.re / lotCount;
     };
 
     return (
@@ -341,32 +366,32 @@ const PnlComparisonTable = ({
                             <tr key={`income-${row.label}`}>
                                 <td className="px-5 py-3 text-slate-600 dark:text-[#c8d3ea]">{row.label}</td>
                                 <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
-                                    {formatCurrency(row.historical)}
+                                    {renderCell(row.historical, row.format)}
                                 </td>
                                 <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
-                                    {formatCurrency(row.grouped)}
+                                    {renderCell(row.rr, row.format)}
+                                </td>
+                                <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
+                                    {renderCell(row.re, row.format)}
                                 </td>
                                 <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
-                                    -
-                                </td>
-                                <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
-                                    {formatLot(row.grouped)}
+                                    {renderCell(resolvePerLot(row), row.format === 'percent' ? 'percent' : 'currency')}
                                 </td>
                             </tr>
                         ))}
                         <tr className="bg-slate-50 dark:bg-[#1a2434] font-semibold">
                             <td className="px-5 py-3 text-slate-700 dark:text-white">Total Income</td>
                             <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
-                                {formatCurrency(totals.incomeHistorical)}
+                                {renderCell(totals.income.historical, totals.income.format)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
-                                {formatCurrency(totals.incomeGrouped)}
+                                {renderCell(totals.income.rr, totals.income.format)}
+                            </td>
+                            <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
+                                {renderCell(totals.income.re, totals.income.format)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
-                                -
-                            </td>
-                            <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
-                                {formatLot(totals.incomeGrouped)}
+                                {renderCell(resolvePerLot(totals.income), 'currency')}
                             </td>
                         </tr>
                         <tr className="bg-slate-100/70 dark:bg-[#182132] text-slate-600 dark:text-[#92a4c9] font-semibold">
@@ -378,49 +403,66 @@ const PnlComparisonTable = ({
                             <tr key={`expense-${row.label}`}>
                                 <td className="px-5 py-3 text-slate-600 dark:text-[#c8d3ea]">{row.label}</td>
                                 <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
-                                    {formatCurrency(row.historical)}
+                                    {renderCell(row.historical, row.format)}
                                 </td>
                                 <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
-                                    -
+                                    {renderCell(row.rr, row.format)}
                                 </td>
                                 <td className="px-5 py-3 text-right font-medium text-slate-900 dark:text-white">
-                                    {formatCurrency(row.grouped)}
+                                    {renderCell(row.re, row.format)}
                                 </td>
                                 <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
-                                    {formatLot(row.grouped)}
+                                    {renderCell(resolvePerLot(row), row.format === 'percent' ? 'percent' : 'currency')}
                                 </td>
                             </tr>
                         ))}
                         <tr className="bg-slate-50 dark:bg-[#1a2434] font-semibold">
                             <td className="px-5 py-3 text-slate-700 dark:text-white">Total Expenses</td>
                             <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
-                                {formatCurrency(totals.expenseHistorical)}
+                                {renderCell(totals.expenses.historical, totals.expenses.format)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
-                                -
+                                {renderCell(totals.expenses.rr, totals.expenses.format)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
-                                {formatCurrency(totals.expenseGrouped)}
+                                {renderCell(totals.expenses.re, totals.expenses.format)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
-                                {formatLot(totals.expenseGrouped)}
+                                {renderCell(resolvePerLot(totals.expenses), 'currency')}
                             </td>
                         </tr>
                         <tr className="bg-white dark:bg-[#232f48] font-semibold">
                             <td className="px-5 py-3 text-slate-700 dark:text-white">Net Operating Income</td>
                             <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
-                                {formatCurrency(totals.noiHistorical)}
+                                {renderCell(totals.noi.historical, totals.noi.format)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
-                                {formatCurrency(totals.noiGrouped)}
+                                {renderCell(totals.noi.rr, totals.noi.format)}
+                            </td>
+                            <td className="px-5 py-3 text-right text-slate-900 dark:text-white">
+                                {renderCell(totals.noi.re, totals.noi.format)}
                             </td>
                             <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
-                                -
-                            </td>
-                            <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9]">
-                                {formatLot(totals.noiGrouped)}
+                                {renderCell(resolvePerLot(totals.noi), 'currency')}
                             </td>
                         </tr>
+                        {summaryRows.map((row) => (
+                            <tr key={`summary-${row.label}`} className="bg-slate-50/50 dark:bg-[#1a2434]/60">
+                                <td className="px-5 py-3 text-slate-700 dark:text-white font-semibold">{row.label}</td>
+                                <td className="px-5 py-3 text-right text-slate-900 dark:text-white font-medium">
+                                    {renderCell(row.historical, row.format)}
+                                </td>
+                                <td className="px-5 py-3 text-right text-slate-900 dark:text-white font-medium">
+                                    {renderCell(row.rr, row.format)}
+                                </td>
+                                <td className="px-5 py-3 text-right text-slate-900 dark:text-white font-medium">
+                                    {renderCell(row.re, row.format)}
+                                </td>
+                                <td className="px-5 py-3 text-right text-slate-600 dark:text-[#92a4c9] font-medium">
+                                    {renderCell(row.perLot, row.format === 'percent' ? 'percent' : 'currency')}
+                                </td>
+                            </tr>
+                        ))}
                     </tbody>
                 </table>
             </div>
@@ -441,15 +483,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
         if (value === null || value === undefined || value === '') return null;
         const raw = String(value).trim();
         const isParenNegative = raw.startsWith('(') && raw.endsWith(')');
-        const cleaned = raw
+        const normalizedRaw = raw.replace(/[−–—]/g, '-');
+        const cleaned = normalizedRaw
             .replace(/[()]/g, '')
             .replace(/[$,%]/g, '')
             .replace(/,/g, '')
             .replace(/x/gi, '')
             .trim();
-        const n = Number(cleaned);
+        if (!cleaned) return null;
+        const isTrailingNegative = cleaned.endsWith('-');
+        const numericText = isTrailingNegative ? cleaned.slice(0, -1).trim() : cleaned;
+        const n = Number(numericText);
         if (!Number.isFinite(n)) return null;
-        return isParenNegative ? -Math.abs(n) : n;
+        if (isParenNegative || isTrailingNegative || normalizedRaw.startsWith('-')) {
+            return -Math.abs(n);
+        }
+        return n;
     };
 
     const normalizeRate = (value: any) => {
@@ -500,6 +549,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
         return null;
     };
 
+    const findLabelValue = (tokens: string[]) => {
+        const entries = Object.entries(labelValues || {});
+        for (const [key, value] of entries) {
+            const parts = key.split('_');
+            if (tokens.every((token) => parts.includes(token))) {
+                return value;
+            }
+        }
+        return null;
+    };
+
+    const findLabelNumber = (tokens: string[]) => {
+        const raw = findLabelValue(tokens);
+        if (raw === null || raw === undefined || raw === '') return null;
+        return toNumber(raw);
+    };
+
+    const findLabelNumberByAny = (tokenSets: string[][]) => {
+        for (const tokens of tokenSets) {
+            const value = findLabelNumber(tokens);
+            if (value !== null) return value;
+        }
+        return null;
+    };
+
     const getOutputNumber = (label: string, aliases: string[] = [], fallbackKeys: string[] = []) =>
         toNumber(getOutputRawFromLabels([label, ...aliases], fallbackKeys));
 
@@ -517,120 +591,233 @@ export const Dashboard: React.FC<DashboardProps> = ({
         });
 
     const pnlData = useMemo(() => {
-        const normalizePnlItems = (items: any[]): PnlItem[] =>
-            Array.isArray(items)
-                ? items
-                      .map((item) => ({
-                          id: String(item?.id ?? '').trim(),
-                          name: String(item?.name ?? '').trim(),
-                          amount: toNumber(item?.amount) ?? 0,
-                      }))
-                      .filter((item) => item.id && item.name)
-                : [];
-
-        const normalizeGrouped = (items: any[]): GroupedItem[] =>
-            Array.isArray(items)
-                ? items
-                      .map((item) => ({
-                          category: String(item?.category ?? '').trim(),
-                          total: toNumber(item?.total) ?? 0,
-                      }))
-                      .filter((item) => item.category)
-                : [];
-
-        const normalizeAssignments = (items: any[]): PnlAssignment[] =>
-            Array.isArray(items)
-                ? items
-                      .map((item) => ({
-                          id: String(item?.id ?? '').trim(),
-                          category: String(item?.category ?? '').trim(),
-                      }))
-                      .filter((item) => item.id && item.category)
-                : [];
-
-        const incomeItems = normalizePnlItems(inputs?.pnl_income_items);
-        const expenseItems = normalizePnlItems(inputs?.pnl_expense_items);
-        const groupedIncome = normalizeGrouped(inputs?.pnl_grouped_income);
-        const groupedExpenses = normalizeGrouped(inputs?.pnl_grouped_expenses);
-        const incomeAssignments = normalizeAssignments(inputs?.pnl_income_assignments);
-        const expenseAssignments = normalizeAssignments(inputs?.pnl_expense_assignments);
-
-        const incomeCategories = [
-            { key: 'rental_income', label: 'Rental Income' },
-            { key: 'rv_income', label: 'RV Income' },
-            { key: 'storage', label: 'Storage' },
-            { key: 'late_fees', label: 'Late Fees' },
-            { key: 'utility_reimbursements', label: 'Utility Reimbursements' },
-            { key: 'other_income', label: 'Other Income' },
-        ];
-
-        const expenseCategories = [
-            { key: 'payroll', label: 'Payroll' },
-            { key: 'utilities', label: 'Utilities' },
-            { key: 'rm', label: 'Repairs & Maintenance' },
-            { key: 'advertising', label: 'Advertising' },
-            { key: 'ga', label: 'General & Administrative' },
-            { key: 'insurance', label: 'Insurance' },
-            { key: 're_taxes', label: 'Real Estate Taxes' },
-            { key: 'mgmt_fee', label: 'Mgmt. Fee' },
-            { key: 'reserves', label: 'Reserves' },
-        ];
-
-        const sumByCategory = (
-            items: PnlItem[],
-            assignments: PnlAssignment[],
-            categories: { key: string; label: string }[]
-        ) => {
-            const totals = new Map(categories.map((cat) => [cat.key, 0]));
-            const assignmentMap = new Map(assignments.map((item) => [item.id, item.category]));
-            let total = 0;
-            items.forEach((item) => {
-                const amount = Number.isFinite(item.amount) ? item.amount : 0;
-                total += amount;
-                const category = assignmentMap.get(item.id);
-                if (category && totals.has(category)) {
-                    totals.set(category, (totals.get(category) ?? 0) + amount);
-                }
-            });
-            return { totals, total };
+        const asArray = (value: string | string[] | null) =>
+            value === null ? [] : Array.isArray(value) ? value : [value];
+        const readValue = (labels: string | string[] | null, format: PnlComparisonRow['format']) => {
+            const raw = getOutputRawFromLabels(asArray(labels));
+            if (raw === null || raw === undefined || raw === '') return null;
+            const numeric = toNumber(raw);
+            if (numeric === null) return null;
+            if (format === 'percent') {
+                const rawText = String(raw).trim();
+                if (rawText.includes('%')) return numeric;
+                if (Math.abs(numeric) <= 100) return numeric;
+                return null;
+            }
+            return numeric;
         };
 
-        const groupedMap = (items: GroupedItem[]) =>
-            new Map(items.map((item) => [item.category, item.total]));
+        const row = (
+            label: string,
+            historicalLabel: string | string[] | null,
+            rrLabel: string | string[] | null,
+            reLabel: string | string[] | null,
+            perLotLabel: string | string[] | null,
+            format: PnlComparisonRow['format'] = 'currency'
+        ): PnlComparisonRow => ({
+            label,
+            historical: readValue(historicalLabel, format),
+            rr: readValue(rrLabel, format),
+            re: readValue(reLabel, format),
+            perLot: readValue(perLotLabel, format === 'percent' ? 'percent' : 'currency'),
+            format,
+        });
 
-        const historicalIncome = sumByCategory(incomeItems, incomeAssignments, incomeCategories);
-        const historicalExpenses = sumByCategory(expenseItems, expenseAssignments, expenseCategories);
-        const groupedIncomeMap = groupedMap(groupedIncome);
-        const groupedExpenseMap = groupedMap(groupedExpenses);
+        const incomeRows: PnlComparisonRow[] = [
+            row('Rental Income', 'Historical T-12 Rental Income', 'Current RR Rental Income', 'RE Rental Income', 'Per Lot Rental Income'),
+            row('RV Income', 'Historical T-12 RV Income', 'Current RR RV Income', 'RE RV Income', 'Per Lot RV Income'),
+            row('Storage Income', 'Historical T-12 Storage Income', 'Current RR Storage Income', 'RE Storage Income', 'Per Lot Storage Income'),
+            row('Late Fee Income', 'Historical T-12 Late Fee Income', null, 'RE Late Fee Income', 'Per Lot Late Fee Income'),
+            row(
+                'Utility Reimbursements',
+                'Historical T-12 Utility Reimbursements',
+                null,
+                'RE Utility Reimbursements',
+                'Per Lot Utility Reimbursements'
+            ),
+            row(
+                'Total Other Income',
+                'Historical T-12 Total Other Income',
+                null,
+                'RE Total Other Income',
+                'Per Lot Total Other Income'
+            ),
+        ];
 
-        const incomeRows = incomeCategories.map((cat) => ({
-            label: cat.label,
-            historical: historicalIncome.totals.get(cat.key) ?? 0,
-            grouped: groupedIncomeMap.get(cat.key) ?? 0,
-        }));
+        const expenseRows: PnlComparisonRow[] = [
+            row('Payroll', 'Historical T-12 Payroll', null, 'RE Payroll', 'Per Lot Payroll'),
+            row('Utilities Charges', 'Historical T-12 Utilities Charges', null, 'RE Utilities Charges', 'Per Lot Utilities Charges'),
+            row(
+                'Repairs and Maintenance',
+                'Historical T-12 Repairs and Maintenance',
+                null,
+                'RE Repairs and Maintenance',
+                'Per Lot Repairs and Maintenance'
+            ),
+            row(
+                'Advertising & Promotion',
+                'Historical T-12 Advertising & Promotion',
+                null,
+                'RE Advertising & Promotion',
+                'Per Lot Advertising & Promotion'
+            ),
+            row(
+                'General & Administrative',
+                'Historical T-12 General & Administrative',
+                null,
+                'RE General & Administrative',
+                'Per Lot General & Administrative'
+            ),
+            row('Insurance', 'Historical T-12 Insurance', null, 'RE Insurance', 'Per Lot Insurance'),
+            row('Real Estate Taxes', 'Historical T-12 Real Estate Taxes', null, 'RE Real Estate Taxes', 'Per Lot Real Estate Taxes'),
+            row('Reserve', 'Historical T-12 Reserve', null, 'RE Reserve', 'Per Lot Reserve'),
+        ];
 
-        const expenseRows = expenseCategories.map((cat) => ({
-            label: cat.label,
-            historical: historicalExpenses.totals.get(cat.key) ?? 0,
-            grouped: groupedExpenseMap.get(cat.key) ?? 0,
-        }));
+        const mgmtFeeRow = row(
+            'Mgmt. Fee',
+            [
+                'Historical T-12 Mgmt. Fee',
+                'Historical T-12 Mgmt Fee',
+                'Historical T-12 Management Fee',
+                'Historical T-12 Mgmt. Fees',
+                'Historical T-12 Management Fees',
+            ],
+            [
+                'Current RR Mgmt. Fee',
+                'Current RR Mgmt Fee',
+                'RR Mgmt. Fee',
+                'RR Mgmt Fee',
+                'Current RR Management Fee',
+                'RR Management Fee',
+                'Current RR Mgmt. Fees',
+                'RR Mgmt. Fees',
+            ],
+            ['RE Mgmt. Fee', 'RE Mgmt Fee', 'RE Management Fee', 'RE Mgmt. Fees', 'RE Management Fees'],
+            ['Per Lot Mgmt. Fee', 'Per Lot Mgmt Fee', 'Per Lot Management Fee', 'Per Lot Mgmt. Fees', 'Per Lot Management Fees']
+        );
 
-        const totalIncomeGrouped = incomeRows.reduce((sum, row) => sum + row.grouped, 0);
-        const totalExpenseGrouped = expenseRows.reduce((sum, row) => sum + row.grouped, 0);
+        if (mgmtFeeRow.historical === null) {
+            const fallback = findLabelNumberByAny([
+                ['historical', 'mgmt', 'fee'],
+                ['historical', 'management', 'fee'],
+                ['t12', 'mgmt', 'fee'],
+                ['t12', 'management', 'fee'],
+            ]);
+            if (fallback !== null) mgmtFeeRow.historical = fallback;
+        }
+        if (mgmtFeeRow.rr === null) {
+            const fallback = findLabelNumberByAny([
+                ['rr', 'mgmt', 'fee'],
+                ['rr', 'management', 'fee'],
+                ['current', 'rr', 'mgmt', 'fee'],
+                ['current', 'rr', 'management', 'fee'],
+            ]);
+            if (fallback !== null) mgmtFeeRow.rr = fallback;
+        }
+        if (mgmtFeeRow.re === null) {
+            const fallback = findLabelNumberByAny([
+                ['re', 'mgmt', 'fee'],
+                ['re', 'management', 'fee'],
+            ]);
+            if (fallback !== null) mgmtFeeRow.re = fallback;
+        }
+        if (mgmtFeeRow.perLot === null) {
+            const fallback = findLabelNumberByAny([
+                ['per', 'lot', 'mgmt', 'fee'],
+                ['per', 'lot', 'management', 'fee'],
+            ]);
+            if (fallback !== null) mgmtFeeRow.perLot = fallback;
+        }
 
-        return {
-            incomeRows,
-            expenseRows,
-            totals: {
-                incomeHistorical: historicalIncome.total,
-                incomeGrouped: totalIncomeGrouped,
-                expenseHistorical: historicalExpenses.total,
-                expenseGrouped: totalExpenseGrouped,
-                noiHistorical: historicalIncome.total - historicalExpenses.total,
-                noiGrouped: totalIncomeGrouped - totalExpenseGrouped,
+        if (mgmtFeeRow.rr === null && mgmtFeeRow.re !== null) {
+            mgmtFeeRow.rr = mgmtFeeRow.re;
+        }
+        if (mgmtFeeRow.re === null && mgmtFeeRow.rr !== null) {
+            mgmtFeeRow.re = mgmtFeeRow.rr;
+        }
+
+        expenseRows.splice(expenseRows.length - 1, 0, mgmtFeeRow);
+
+        const rrTotalIncome = readValue(['Current RR Total Income', 'RR Total Income'], 'currency');
+        const rrTotalExpenses = readValue(
+            ['Current RR TOTAL EXPENSES', 'Current RR Total Expenses', 'RR TOTAL EXPENSES', 'RR Total Expenses'],
+            'currency'
+        );
+        const rrNoiDirect = readValue(
+            ['Current RR NET OPERATING INCOME', 'Current RR NOI', 'RR NET OPERATING INCOME', 'RR NOI'],
+            'currency'
+        );
+        const rrNoiComputed =
+            rrNoiDirect !== null
+                ? rrNoiDirect
+                : rrTotalIncome !== null && rrTotalExpenses !== null
+                    ? rrTotalIncome - Math.abs(rrTotalExpenses)
+                    : null;
+
+        const totals = {
+            income: row(
+                'Total Income',
+                'Historical T-12 Total Income',
+                ['Current RR Total Income', 'RR Total Income'],
+                'RE Total Income',
+                'Per Lot Total Income'
+            ),
+            expenses: row(
+                'Total Expenses',
+                'Historical T-12 TOTAL EXPENSES',
+                ['Current RR TOTAL EXPENSES', 'Current RR Total Expenses', 'RR TOTAL EXPENSES', 'RR Total Expenses'],
+                'RE TOTAL EXPENSES',
+                'Per Lot TOTAL EXPENSES'
+            ),
+            noi: {
+                label: 'Net Operating Income',
+                historical: readValue('Historical T-12 NET OPERATING INCOME', 'currency'),
+                rr: rrNoiComputed,
+                re: readValue('RE NET OPERATING INCOME', 'currency'),
+                perLot: null,
+                format: 'currency' as const,
             },
         };
-    }, [inputs, toNumber]);
+
+        const summaryRows: PnlComparisonRow[] = [
+            row('Expense Ratio', 'Historical T-12 Expense Ratio', null, 'RE Expense Ratio', null, 'percent'),
+            row('Expense / Lot', 'Historical T-12 Expense / Lot', null, 'RE Expense / Lot', null, 'currency'),
+            row(
+                'Mgmt. Fee',
+                [
+                    'Historical T-12 Mgmt. Fee %',
+                    'Historical T-12 Mgmt Fee %',
+                    'Historical T-12 Mgmt. Fee',
+                    'Historical T-12 Mgmt Fee',
+                    'Historical T-12 Management Fee %',
+                    'Historical T-12 Management Fee',
+                ],
+                [
+                    'Current RR Mgmt. Fee %',
+                    'Current RR Mgmt Fee %',
+                    'RR Mgmt. Fee %',
+                    'RR Mgmt Fee %',
+                    'Current RR Management Fee %',
+                    'Current RR Management Fee',
+                    'RR Management Fee %',
+                    'RR Management Fee',
+                ],
+                ['RE Mgmt. Fee %', 'RE Mgmt Fee %', 'RE Mgmt. Fee', 'RE Mgmt Fee', 'RE Management Fee %', 'RE Management Fee'],
+                null,
+                'percent'
+            ),
+            row(
+                'Utility Reimbursements per occupied site',
+                'Utility Reimbursements per occupied site',
+                null,
+                null,
+                null,
+                'currency'
+            ),
+        ];
+
+        return { incomeRows, expenseRows, totals, summaryRows };
+    }, [outputs, inputs]);
 
     const lotCount = toNumber(inputs?.total_lots);
     const showPnlTable = true;
@@ -781,9 +968,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const revenueYears = useMemo(() => buildOutputValues('revenue_Year_', 5), [outputs]);
     const expenseYears = useMemo(() => buildOutputValues('expenses_Year_', 5), [outputs]);
     const noiYears = useMemo(() => buildOutputValues('noi_Year_', 5), [outputs]);
-    const historicalRevenue = pnlData.totals.incomeHistorical ?? 0;
-    const historicalExpenses = pnlData.totals.expenseHistorical ?? 0;
-    const historicalNoi = pnlData.totals.noiHistorical ?? 0;
+    const historicalRevenue = pnlData.totals.income.historical ?? 0;
+    const historicalExpenses = pnlData.totals.expenses.historical ?? 0;
+    const historicalNoi = pnlData.totals.noi.historical ?? 0;
     const revenueExpenseNoiSeries = useMemo<LineSeries[]>(
         () => [
             { label: 'Revenue', values: [historicalRevenue, ...revenueYears], color: '#2b6cee', softColor: 'rgba(43, 108, 238, 0.15)' },
@@ -935,6 +1122,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     const projectName = inputs?.name || 'Valuation Report';
     const projectAddress = inputs?.address || 'Address pending';
+    const handleDownloadReport = () => {
+        if (!resolvedShareId || typeof window === 'undefined') return;
+        const fileName = projectName.replace(/[^a-zA-Z0-9-_ ]+/g, '').trim() || 'valuation-report';
+        const query = new URLSearchParams({
+            spreadsheetId: resolvedShareId,
+            fileName,
+        });
+        window.location.href = `/api/projects/download?${query.toString()}`;
+    };
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 text-slate-900 dark:text-white">
@@ -976,7 +1172,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <button
                         className="flex items-center justify-center rounded-lg h-10 px-4 bg-[#2b6cee] hover:bg-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-500/20 transition-all"
                         type="button"
-                        disabled={isReadOnly}
+                        onClick={handleDownloadReport}
+                        disabled={!resolvedShareId}
                     >
                         <span className="material-symbols-outlined mr-2 text-[18px]">download</span>
                         Download Report
@@ -1065,7 +1262,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         incomeRows={pnlData.incomeRows}
                         expenseRows={pnlData.expenseRows}
                         totals={pnlData.totals}
-                        formatCurrency={fmtCurrency}
+                        summaryRows={pnlData.summaryRows}
+                        formatValue={formatValue}
                     />
                 </section>
             )}

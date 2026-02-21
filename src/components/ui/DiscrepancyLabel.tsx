@@ -6,6 +6,7 @@ type DiscrepancyLabelProps = {
     fieldKey: string;
     currentValue?: any;
     pdfValues?: Record<string, any>;
+    apiValues?: Record<string, any>;
     className?: string;
 };
 
@@ -22,21 +23,32 @@ export const DiscrepancyLabel = ({
     fieldKey,
     currentValue,
     pdfValues,
+    apiValues,
     className,
 }: DiscrepancyLabelProps) => {
     const pdfValue = pdfValues?.[fieldKey];
+    const apiValue = apiValues?.[fieldKey];
     const normalizedPdf = normalizeValue(pdfValue);
+    const normalizedApi = normalizeValue(apiValue);
     const normalizedCurrent = normalizeValue(currentValue);
-    const hasDiscrepancy =
+    const hasPdfDiscrepancy =
         normalizedPdf !== '' &&
         normalizeComparable(normalizedPdf) !== normalizeComparable(normalizedCurrent);
+    const hasApiDiscrepancy =
+        normalizedApi !== '' &&
+        normalizeComparable(normalizedApi) !== normalizeComparable(normalizedCurrent);
 
     return (
         <label className={cn("block text-sm font-medium text-slate-600 dark:text-gray-400 mb-2", className)}>
             <span>{label}</span>
-            {hasDiscrepancy && (
+            {hasPdfDiscrepancy && (
                 <span className="ml-2 inline-flex items-center rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-2 py-0.5 text-xs font-semibold">
-                    PDF's discrepancy: {normalizedPdf}
+                    PDF discrepancy: {normalizedPdf}
+                </span>
+            )}
+            {hasApiDiscrepancy && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/30 px-2 py-0.5 text-xs font-semibold">
+                    API discrepancy: {normalizedApi}
                 </span>
             )}
         </label>

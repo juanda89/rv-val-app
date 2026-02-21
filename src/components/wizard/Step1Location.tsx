@@ -8,11 +8,14 @@ import usePlacesAutocomplete, {
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { DiscrepancyLabel } from "@/components/ui/DiscrepancyLabel";
+import type { ApiProvider } from '@/types/apiProvider';
+import { shouldApplyApiValue, sanitizeApiSnapshot, isEmptyValue } from '@/lib/apiAutofillMerge';
 
 interface Step1Props {
     onDataChange: (data: any) => void;
     initialData?: any;
     onBusyChange?: (busy: boolean) => void;
+    selectedApi?: ApiProvider | null;
 }
 
 const friendlyLabel = (value: string) => {
@@ -141,7 +144,7 @@ const extractStateFromGeocode = (result: any) => {
     );
 };
 
-const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Props) => {
+const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedApi }: Step1Props) => {
     const {
         ready,
         value,
@@ -159,9 +162,12 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
     const [attomError, setAttomError] = useState<string | null>(null);
     const [attomMessage, setAttomMessage] = useState<string | null>(null);
     const [showMoreDemographics, setShowMoreDemographics] = useState(false);
-    const lastAttomAddressRef = React.useRef<string>('');
     const lastGeocodedAddressRef = React.useRef<string>('');
+    const geocodeRequestSeqRef = React.useRef(0);
+    const censusFipsCacheRef = React.useRef<Map<string, string | null>>(new Map());
+    const dataUsaCacheRef = React.useRef<Map<string, Record<string, number | null> | null>>(new Map());
     const pdfValues = initialData?.pdf_values || {};
+    const apiValues = initialData?.api_values || {};
     const defaultValues = initialData?.default_values || {};
     const isEmptyValue = (value: any) =>
         value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
@@ -196,8 +202,123 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
 
     React.useEffect(() => {
         onBusyChange?.(attomLoading);
-        return () => onBusyChange?.(false);
     }, [attomLoading, onBusyChange]);
+
+    const resolveFipsFromCensusByCoords = React.useCallback(async (lat: number, lng: number) => {
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+        const cacheKey = `${lat.toFixed(6)}|${lng.toFixed(6)}`;
+        if (censusFipsCacheRef.current.has(cacheKey)) {
+            return censusFipsCacheRef.current.get(cacheKey) ?? null;
+        }
+
+        try {
+            const response = await fetch('/api/census/fips', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lat,
+                    lng,
+                }),
+            });
+
+            if (!response.ok) {
+                if (response.status === 404) {
+                    censusFipsCacheRef.current.set(cacheKey, null);
+                }
+                return null;
+            }
+
+            const payload = await response.json();
+            const fipsCode = typeof payload?.fips_code === 'string' ? payload.fips_code.trim() : '';
+            const resolved = fipsCode || null;
+            censusFipsCacheRef.current.set(cacheKey, resolved);
+            return resolved;
+        } catch (error) {
+            console.warn('Census FIPS lookup failed:', error);
+            return null;
+        }
+    }, []);
+
+    const resolveDemographicsFromDataUsa = React.useCallback(async (fipsCode: string) => {
+        const normalizedFips = String(fipsCode || '').replace(/\D/g, '').padStart(5, '0').slice(-5);
+        if (!normalizedFips) return null;
+
+        if (dataUsaCacheRef.current.has(normalizedFips)) {
+            return dataUsaCacheRef.current.get(normalizedFips) ?? null;
+        }
+
+        try {
+            const response = await fetch('/api/datausa/county', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fips_code: normalizedFips }),
+            });
+            if (!response.ok) {
+                if (response.status === 404) {
+                    dataUsaCacheRef.current.set(normalizedFips, null);
+                }
+                return null;
+            }
+
+            const payload = await response.json();
+            const result: Record<string, number | null> = {};
+            if (typeof payload?.population === 'number') {
+                result.population = payload.population;
+            }
+            if (typeof payload?.population_change === 'number') {
+                result.population_change = payload.population_change;
+            }
+            if (typeof payload?.median_household_income === 'number') {
+                result.median_household_income = payload.median_household_income;
+            }
+            if (typeof payload?.median_household_income_change === 'number') {
+                result.median_household_income_change = payload.median_household_income_change;
+            }
+            if (typeof payload?.median_property_value === 'number') {
+                result.median_property_value = payload.median_property_value;
+            }
+            if (typeof payload?.median_property_value_change === 'number') {
+                result.median_property_value_change = payload.median_property_value_change;
+            }
+            if (typeof payload?.poverty_rate === 'number') {
+                result.poverty_rate = payload.poverty_rate;
+            }
+            if (typeof payload?.number_of_employees === 'number') {
+                result.number_of_employees = payload.number_of_employees;
+            }
+            if (typeof payload?.number_of_employees_change === 'number') {
+                result.number_of_employees_change = payload.number_of_employees_change;
+            }
+            if (typeof payload?.number_of_businesses === 'number') {
+                result.number_of_businesses = payload.number_of_businesses;
+            }
+            if (typeof payload?.two_br_rent === 'number') {
+                result.two_br_rent = payload.two_br_rent;
+            }
+            if (typeof payload?.eli_renter_households === 'number') {
+                result.eli_renter_households = payload.eli_renter_households;
+            }
+            if (typeof payload?.units_per_100 === 'number') {
+                result.units_per_100 = payload.units_per_100;
+            }
+            if (typeof payload?.total_units === 'number') {
+                result.total_units = payload.total_units;
+            }
+            if (Object.prototype.hasOwnProperty.call(payload, 'violent_crime')) {
+                result.violent_crime = typeof payload?.violent_crime === 'number' ? payload.violent_crime : null;
+            }
+            if (Object.prototype.hasOwnProperty.call(payload, 'property_crime')) {
+                result.property_crime = typeof payload?.property_crime === 'number' ? payload.property_crime : null;
+            }
+            const resolved = Object.keys(result).length > 0 ? result : null;
+            dataUsaCacheRef.current.set(normalizedFips, resolved);
+            return resolved;
+        } catch (error) {
+            console.warn('DataUSA demographics lookup failed:', error);
+            return null;
+        }
+    }, []);
 
     React.useEffect(() => {
         const address = initialData?.address;
@@ -207,11 +328,13 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
 
         lastGeocodedAddressRef.current = address;
         let isActive = true;
+        const requestSeq = ++geocodeRequestSeqRef.current;
 
         getGeocode({ address })
-            .then((results) => {
+            .then(async (results) => {
                 if (!isActive || !results?.[0]) return;
-                const { lat, lng } = getLatLng(results[0]);
+                const { lat, lng } = await getLatLng(results[0]);
+                if (!isActive || requestSeq !== geocodeRequestSeqRef.current) return;
                 setCoordinates({ lat, lng });
 
                 const updates: Record<string, any> = {};
@@ -229,6 +352,78 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                 if (county) updates.county = county;
                 if (state) updates.state = state;
                 if (zipCode) updates.zip_code = zipCode;
+                const fipsCode = await resolveFipsFromCensusByCoords(lat, lng);
+                if (!isActive || requestSeq !== geocodeRequestSeqRef.current) return;
+                if (fipsCode) {
+                    updates.fips_code = fipsCode;
+                    const demographics = await resolveDemographicsFromDataUsa(fipsCode);
+                    if (!isActive || requestSeq !== geocodeRequestSeqRef.current) return;
+                    const apiValuesUpdate: Record<string, any> = { ...(initialData?.api_values || {}), fips_code: fipsCode };
+                    if (demographics?.population !== undefined) {
+                        updates.population = demographics.population;
+                        apiValuesUpdate.population = demographics.population;
+                    }
+                    if (demographics?.population_change !== undefined) {
+                        updates.population_change = demographics.population_change;
+                        apiValuesUpdate.population_change = demographics.population_change;
+                    }
+                    if (demographics?.median_household_income !== undefined) {
+                        updates.median_household_income = demographics.median_household_income;
+                        apiValuesUpdate.median_household_income = demographics.median_household_income;
+                    }
+                    if (demographics?.median_household_income_change !== undefined) {
+                        updates.median_household_income_change = demographics.median_household_income_change;
+                        apiValuesUpdate.median_household_income_change = demographics.median_household_income_change;
+                    }
+                    if (demographics?.median_property_value !== undefined) {
+                        updates.median_property_value = demographics.median_property_value;
+                        apiValuesUpdate.median_property_value = demographics.median_property_value;
+                    }
+                    if (demographics?.median_property_value_change !== undefined) {
+                        updates.median_property_value_change = demographics.median_property_value_change;
+                        apiValuesUpdate.median_property_value_change = demographics.median_property_value_change;
+                    }
+                    if (demographics?.poverty_rate !== undefined) {
+                        updates.poverty_rate = demographics.poverty_rate;
+                        apiValuesUpdate.poverty_rate = demographics.poverty_rate;
+                    }
+                    if (demographics?.number_of_employees !== undefined) {
+                        updates.number_of_employees = demographics.number_of_employees;
+                        apiValuesUpdate.number_of_employees = demographics.number_of_employees;
+                    }
+                    if (demographics?.number_of_employees_change !== undefined) {
+                        updates.number_of_employees_change = demographics.number_of_employees_change;
+                        apiValuesUpdate.number_of_employees_change = demographics.number_of_employees_change;
+                    }
+                    if (demographics?.number_of_businesses !== undefined) {
+                        apiValuesUpdate.number_of_businesses = demographics.number_of_businesses;
+                    }
+                    if (demographics?.two_br_rent !== undefined) {
+                        updates.two_br_rent = demographics.two_br_rent;
+                        apiValuesUpdate.two_br_rent = demographics.two_br_rent;
+                    }
+                    if (demographics?.eli_renter_households !== undefined) {
+                        updates.eli_renter_households = demographics.eli_renter_households;
+                        apiValuesUpdate.eli_renter_households = demographics.eli_renter_households;
+                    }
+                    if (demographics?.units_per_100 !== undefined) {
+                        updates.units_per_100 = demographics.units_per_100;
+                        apiValuesUpdate.units_per_100 = demographics.units_per_100;
+                    }
+                    if (demographics?.total_units !== undefined) {
+                        updates.total_units = demographics.total_units;
+                        apiValuesUpdate.total_units = demographics.total_units;
+                    }
+                    if (demographics && Object.prototype.hasOwnProperty.call(demographics, 'violent_crime')) {
+                        updates.violent_crime = demographics.violent_crime ?? null;
+                        apiValuesUpdate.violent_crime = demographics.violent_crime ?? null;
+                    }
+                    if (demographics && Object.prototype.hasOwnProperty.call(demographics, 'property_crime')) {
+                        updates.property_crime = demographics.property_crime ?? null;
+                        apiValuesUpdate.property_crime = demographics.property_crime ?? null;
+                    }
+                    updates.api_values = apiValuesUpdate;
+                }
                 if (address) updates.mobile_home_park_address = address;
 
                 if (Object.keys(updates).length > 0) {
@@ -242,11 +437,16 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
         return () => {
             isActive = false;
         };
-    }, [initialData?.address, initialData?.lat, initialData?.lng, initialData?.city, initialData?.county, onDataChange, ready]);
+    }, [initialData?.address, initialData?.lat, initialData?.lng, initialData?.city, initialData?.county, initialData?.api_values, onDataChange, ready, resolveFipsFromCensusByCoords, resolveDemographicsFromDataUsa]);
 
-    const shouldOverrideWithAttom = (currentValue: any, pdfValue: any, key: string) =>
-        isEmptyOrDefault(key, currentValue) ||
-        normalizeComparable(currentValue) === normalizeComparable(pdfValue);
+    const shouldFillWithAttom = (currentValue: any, key: string) => {
+        if (isEmptyOrDefault(key, currentValue)) return true;
+        const previousApiValue = apiValues?.[key];
+        if (!isEmptyValue(previousApiValue) && normalizeComparable(currentValue) === normalizeComparable(previousApiValue)) {
+            return true;
+        }
+        return false;
+    };
 
     const applyAttomData = (payload: any) => {
         const identity = payload?.property_identity;
@@ -258,77 +458,97 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
         const demographicsDetails = payload?.demographics_details || null;
 
         const updates: Record<string, any> = {};
-        if (identity.apn && shouldOverrideWithAttom(initialData?.parcelNumber, pdfValues.parcelNumber, 'parcelNumber')) {
+        const attomSnapshot: Record<string, any> = {};
+        if (identity.owner) attomSnapshot.owner_name = identity.owner;
+        if (identity.apn) attomSnapshot.parcelNumber = identity.apn;
+        if (identity.apn) attomSnapshot.parcel_1 = identity.apn;
+        if (identity.fips_code) attomSnapshot.fips_code = identity.fips_code;
+        if (identity.acreage) attomSnapshot.acreage = identity.acreage;
+        if (identity.acreage) attomSnapshot.parcel_1_acreage = identity.acreage;
+        if (identity.year_built) attomSnapshot.year_built = identity.year_built;
+        if (identity.property_type) attomSnapshot.property_type = identity.property_type;
+        if (financials.last_sale_price) attomSnapshot.last_sale_price = financials.last_sale_price;
+
+        if (identity.owner && shouldFillWithAttom(initialData?.owner_name, 'owner_name')) {
+            updates.owner_name = identity.owner;
+        }
+        if (identity.apn && shouldFillWithAttom(initialData?.parcelNumber, 'parcelNumber')) {
             updates.parcelNumber = identity.apn;
         }
-        if (identity.apn && shouldOverrideWithAttom(initialData?.parcel_1, pdfValues.parcel_1, 'parcel_1')) {
+        if (identity.apn && shouldFillWithAttom(initialData?.parcel_1, 'parcel_1')) {
             updates.parcel_1 = identity.apn;
         }
         if (identity.fips_code && isEmptyOrDefault('fips_code', initialData?.fips_code)) {
             updates.fips_code = identity.fips_code;
         }
-        if (identity.acreage && shouldOverrideWithAttom(initialData?.acreage, pdfValues.acreage, 'acreage')) {
+        if (identity.acreage && shouldFillWithAttom(initialData?.acreage, 'acreage')) {
             updates.acreage = identity.acreage;
         }
-        if (identity.acreage && shouldOverrideWithAttom(initialData?.parcel_1_acreage, pdfValues.parcel_1_acreage, 'parcel_1_acreage')) {
+        if (identity.acreage && shouldFillWithAttom(initialData?.parcel_1_acreage, 'parcel_1_acreage')) {
             updates.parcel_1_acreage = identity.acreage;
         }
-        if (identity.year_built && shouldOverrideWithAttom(initialData?.year_built, pdfValues.year_built, 'year_built')) {
+        if (identity.year_built && shouldFillWithAttom(initialData?.year_built, 'year_built')) {
             updates.year_built = identity.year_built;
         }
-        if (identity.property_type && shouldOverrideWithAttom(initialData?.property_type, pdfValues.property_type, 'property_type')) {
+        if (identity.property_type && shouldFillWithAttom(initialData?.property_type, 'property_type')) {
             updates.property_type = identity.property_type;
         }
-        if (financials.last_sale_price && shouldOverrideWithAttom(initialData?.last_sale_price, pdfValues.last_sale_price, 'last_sale_price')) {
+        if (financials.last_sale_price && shouldFillWithAttom(initialData?.last_sale_price, 'last_sale_price')) {
             updates.last_sale_price = financials.last_sale_price;
         }
         if (!initialData?.mobile_home_park_name && initialData?.name) updates.mobile_home_park_name = initialData.name;
 
-        if (isEmptyOrDefault('population', initialData?.population) && demographics.population) updates.population = demographics.population;
-        if (isEmptyOrDefault('population_change', initialData?.population_change) && demographics.population_change) {
+        if (shouldFillWithAttom(initialData?.population, 'population') && demographics.population) updates.population = demographics.population;
+        if (shouldFillWithAttom(initialData?.population_change, 'population_change') && demographics.population_change) {
             updates.population_change = demographics.population_change;
         }
-        if (isEmptyOrDefault('median_household_income', initialData?.median_household_income) && demographics.median_household_income) {
+        if (shouldFillWithAttom(initialData?.median_household_income, 'median_household_income') && demographics.median_household_income) {
             updates.median_household_income = demographics.median_household_income;
         }
-        if (isEmptyOrDefault('median_household_income_change', initialData?.median_household_income_change) && demographics.median_household_income_change) {
+        if (shouldFillWithAttom(initialData?.median_household_income_change, 'median_household_income_change') && demographics.median_household_income_change) {
             updates.median_household_income_change = demographics.median_household_income_change;
         }
-        if (isEmptyOrDefault('poverty_rate', initialData?.poverty_rate) && demographics.poverty_rate) updates.poverty_rate = demographics.poverty_rate;
-        if (isEmptyOrDefault('number_of_employees', initialData?.number_of_employees) && demographics.number_of_employees) {
+        if (shouldFillWithAttom(initialData?.poverty_rate, 'poverty_rate') && demographics.poverty_rate) updates.poverty_rate = demographics.poverty_rate;
+        if (shouldFillWithAttom(initialData?.number_of_employees, 'number_of_employees') && demographics.number_of_employees) {
             updates.number_of_employees = demographics.number_of_employees;
         }
-        if (isEmptyOrDefault('number_of_employees_change', initialData?.number_of_employees_change) && demographics.number_of_employees_change) {
+        if (shouldFillWithAttom(initialData?.number_of_employees_change, 'number_of_employees_change') && demographics.number_of_employees_change) {
             updates.number_of_employees_change = demographics.number_of_employees_change;
         }
-        if (isEmptyOrDefault('median_property_value', initialData?.median_property_value) && demographics.median_property_value) {
+        if (shouldFillWithAttom(initialData?.median_property_value, 'median_property_value') && demographics.median_property_value) {
             updates.median_property_value = demographics.median_property_value;
         }
-        if (isEmptyOrDefault('median_property_value_change', initialData?.median_property_value_change) && demographics.median_property_value_change) {
+        if (shouldFillWithAttom(initialData?.median_property_value_change, 'median_property_value_change') && demographics.median_property_value_change) {
             updates.median_property_value_change = demographics.median_property_value_change;
         }
         const crimeDetails = demographicsDetails?.crime || {};
         const violentCrimeValue = crimeDetails?.crime_Index ?? initialData?.crime_Index ?? demographics.violent_crime ?? null;
         const propertyCrimeValue =
             crimeDetails?.motor_Vehicle_Theft_Index ?? initialData?.motor_Vehicle_Theft_Index ?? demographics.property_crime ?? null;
-        if (violentCrimeValue !== null && violentCrimeValue !== undefined) {
+        if (violentCrimeValue !== null && violentCrimeValue !== undefined && shouldFillWithAttom(initialData?.violent_crime, 'violent_crime')) {
             updates.violent_crime = violentCrimeValue;
         }
-        if (propertyCrimeValue !== null && propertyCrimeValue !== undefined) {
+        if (propertyCrimeValue !== null && propertyCrimeValue !== undefined && shouldFillWithAttom(initialData?.property_crime, 'property_crime')) {
             updates.property_crime = propertyCrimeValue;
         }
-        if (isEmptyOrDefault('two_br_rent', initialData?.two_br_rent) && demographics.two_br_rent) {
+        if (shouldFillWithAttom(initialData?.two_br_rent, 'two_br_rent') && demographics.two_br_rent) {
             updates.two_br_rent = demographics.two_br_rent;
         }
-        if (isEmptyOrDefault('eli_renter_households', initialData?.eli_renter_households) && housing.eli_renter_households) {
+        if (shouldFillWithAttom(initialData?.eli_renter_households, 'eli_renter_households') && housing.eli_renter_households) {
             updates.eli_renter_households = housing.eli_renter_households;
         }
-        if (isEmptyOrDefault('units_per_100', initialData?.units_per_100) && housing.affordable_units_per_100) {
+        if (shouldFillWithAttom(initialData?.units_per_100, 'units_per_100') && housing.affordable_units_per_100) {
             updates.units_per_100 = housing.affordable_units_per_100;
         }
-        if (isEmptyOrDefault('total_units', initialData?.total_units) && housing.total_units) updates.total_units = housing.total_units;
-        if (demographicsDetails && !initialData?.demographics_details) {
+        if (shouldFillWithAttom(initialData?.total_units, 'total_units') && housing.total_units) updates.total_units = housing.total_units;
+        if (demographicsDetails && shouldFillWithAttom(initialData?.demographics_details, 'demographics_details')) {
             updates.demographics_details = demographicsDetails;
+        }
+
+        const providerSnapshot = sanitizeApiSnapshot(payload?.api_snapshot || {});
+        const mergedApiValues = { ...(initialData?.api_values || {}), ...attomSnapshot, ...providerSnapshot };
+        if (Object.keys(mergedApiValues).length > 0) {
+            updates.api_values = mergedApiValues;
         }
 
         if (Object.keys(updates).length > 0) {
@@ -351,46 +571,56 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
         if (isEmptyOrDefault('last_sale_price', initialData?.last_sale_price) && pdfValues.last_sale_price) {
             updates.last_sale_price = pdfValues.last_sale_price;
         }
+        if (isEmptyOrDefault('owner_name', initialData?.owner_name) && pdfValues.owner_name) {
+            updates.owner_name = pdfValues.owner_name;
+        }
         if (Object.keys(updates).length > 0) {
             onDataChange(updates);
         }
     };
 
     const fetchAttomData = async (addressToUse: string, coords?: { lat: number; lng: number }) => {
-        if (!addressToUse) return;
+        if (!selectedApi) {
+            setAttomError('Select an API source first.');
+            return;
+        }
+        const existingApn = initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber;
+        if (!addressToUse && !coords && !existingApn) return;
         setAttomLoading(true);
         setAttomError(null);
         setAttomMessage(null);
         try {
-            const response = await fetch('/api/attom/property', {
+            const response = await fetch('/api/property/autofill', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: addressToUse, lat: coords?.lat, lng: coords?.lng }),
+                body: JSON.stringify({
+                    provider: selectedApi,
+                    intent: 'step1',
+                    address: addressToUse || undefined,
+                    lat: coords?.lat,
+                    lng: coords?.lng,
+                    apn: existingApn || undefined,
+                    fips_code: initialData?.fips_code,
+                    county: initialData?.county,
+                    city: initialData?.city,
+                    state: initialData?.state,
+                    zip_code: initialData?.zip_code,
+                }),
             });
             const payload = await response.json();
             if (!response.ok) {
-                if (response.status === 404) {
-                    setAttomMessage('ATTOM: no results found');
-                    applyPdfFallback();
-                    return;
-                }
-                throw new Error(payload?.error || 'ATTOM request failed');
+                throw new Error(payload?.error || 'Auto-fill request failed');
             }
-            if (payload?.error) {
-                throw new Error(payload.error);
-            }
-            const statusMsg = payload?.status?.msg || payload?.status?.message;
-            const statusTotal = payload?.status?.total;
-            if (statusMsg === 'SuccessWithoutResult' || statusTotal === 0) {
-                setAttomMessage('ATTOM: no results found');
+            if (!payload?.apn_found) {
+                setAttomMessage(payload?.message || `No APN/Assessor ID found via address or coordinates for ${selectedApi}.`);
                 applyPdfFallback();
                 return;
             }
             applyAttomData(payload);
-            setAttomMessage(`AI: data found${payload?.source ? ` (${payload.source})` : ''}`);
+            setAttomMessage(payload?.message || 'AI: data found.');
         } catch (error: any) {
-            console.error('ATTOM fetch failed:', error);
-            setAttomError(error.message || 'ATTOM request failed');
+            console.warn('Autofill failed:', error?.message || error);
+            setAttomError(error.message || 'Auto-fill request failed');
             applyPdfFallback();
         } finally {
             setAttomLoading(false);
@@ -398,9 +628,11 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
     };
 
     const geocodeAddress = async (addressToUse: string) => {
+        const requestSeq = ++geocodeRequestSeqRef.current;
         const results = await getGeocode({ address: addressToUse });
-        if (!results?.[0]) return null;
+        if (!results?.[0] || requestSeq !== geocodeRequestSeqRef.current) return null;
         const { lat, lng } = await getLatLng(results[0]);
+        if (requestSeq !== geocodeRequestSeqRef.current) return null;
         setCoordinates({ lat, lng });
         const city = extractCityFromGeocode(results[0]);
         const county = extractCountyFromGeocode(results[0]);
@@ -418,6 +650,78 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
         };
         if (county) {
             payload.county = county;
+        }
+        const fipsCode = await resolveFipsFromCensusByCoords(lat, lng);
+        if (requestSeq !== geocodeRequestSeqRef.current) return null;
+        if (fipsCode) {
+            payload.fips_code = fipsCode;
+            const apiValuesUpdate: Record<string, any> = { ...(initialData?.api_values || {}), fips_code: fipsCode };
+            const demographics = await resolveDemographicsFromDataUsa(fipsCode);
+            if (requestSeq !== geocodeRequestSeqRef.current) return null;
+            if (demographics?.population !== undefined) {
+                payload.population = demographics.population;
+                apiValuesUpdate.population = demographics.population;
+            }
+            if (demographics?.population_change !== undefined) {
+                payload.population_change = demographics.population_change;
+                apiValuesUpdate.population_change = demographics.population_change;
+            }
+            if (demographics?.median_household_income !== undefined) {
+                payload.median_household_income = demographics.median_household_income;
+                apiValuesUpdate.median_household_income = demographics.median_household_income;
+            }
+            if (demographics?.median_household_income_change !== undefined) {
+                payload.median_household_income_change = demographics.median_household_income_change;
+                apiValuesUpdate.median_household_income_change = demographics.median_household_income_change;
+            }
+            if (demographics?.median_property_value !== undefined) {
+                payload.median_property_value = demographics.median_property_value;
+                apiValuesUpdate.median_property_value = demographics.median_property_value;
+            }
+            if (demographics?.median_property_value_change !== undefined) {
+                payload.median_property_value_change = demographics.median_property_value_change;
+                apiValuesUpdate.median_property_value_change = demographics.median_property_value_change;
+            }
+            if (demographics?.poverty_rate !== undefined) {
+                payload.poverty_rate = demographics.poverty_rate;
+                apiValuesUpdate.poverty_rate = demographics.poverty_rate;
+            }
+            if (demographics?.number_of_employees !== undefined) {
+                payload.number_of_employees = demographics.number_of_employees;
+                apiValuesUpdate.number_of_employees = demographics.number_of_employees;
+            }
+            if (demographics?.number_of_employees_change !== undefined) {
+                payload.number_of_employees_change = demographics.number_of_employees_change;
+                apiValuesUpdate.number_of_employees_change = demographics.number_of_employees_change;
+            }
+            if (demographics?.number_of_businesses !== undefined) {
+                apiValuesUpdate.number_of_businesses = demographics.number_of_businesses;
+            }
+            if (demographics?.two_br_rent !== undefined) {
+                payload.two_br_rent = demographics.two_br_rent;
+                apiValuesUpdate.two_br_rent = demographics.two_br_rent;
+            }
+            if (demographics?.eli_renter_households !== undefined) {
+                payload.eli_renter_households = demographics.eli_renter_households;
+                apiValuesUpdate.eli_renter_households = demographics.eli_renter_households;
+            }
+            if (demographics?.units_per_100 !== undefined) {
+                payload.units_per_100 = demographics.units_per_100;
+                apiValuesUpdate.units_per_100 = demographics.units_per_100;
+            }
+            if (demographics?.total_units !== undefined) {
+                payload.total_units = demographics.total_units;
+                apiValuesUpdate.total_units = demographics.total_units;
+            }
+            if (demographics && Object.prototype.hasOwnProperty.call(demographics, 'violent_crime')) {
+                payload.violent_crime = demographics.violent_crime ?? null;
+                apiValuesUpdate.violent_crime = demographics.violent_crime ?? null;
+            }
+            if (demographics && Object.prototype.hasOwnProperty.call(demographics, 'property_crime')) {
+                payload.property_crime = demographics.property_crime ?? null;
+                apiValuesUpdate.property_crime = demographics.property_crime ?? null;
+            }
+            payload.api_values = apiValuesUpdate;
         }
         onDataChange(payload);
         return { lat, lng };
@@ -444,24 +748,15 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
     };
 
     const handleAutoFillClick = async () => {
-        if (!value) return;
+        const existingApn = initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber;
+        if (!value && !existingApn) return;
         try {
-            const coords = await geocodeAddress(value);
+            const coords = value ? await geocodeAddress(value) : undefined;
             await fetchAttomData(value, coords || undefined);
         } catch (error) {
             console.error("Error: ", error);
         }
     };
-
-    React.useEffect(() => {
-        const address = initialData?.address;
-        if (!address || attomLoading || initialData?.attom_initial_autofill_done) return;
-        const key = `${address}-${coordinates?.lat ?? ''}-${coordinates?.lng ?? ''}`;
-        if (lastAttomAddressRef.current === key) return;
-        lastAttomAddressRef.current = key;
-        onDataChange({ attom_initial_autofill_done: true });
-        void fetchAttomData(address, coordinates || undefined);
-    }, [initialData?.address, initialData?.attom_initial_autofill_done, attomLoading, coordinates, onDataChange]);
 
     return (
         <div className="space-y-6">
@@ -476,6 +771,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                     fieldKey="mobile_home_park_name"
                     currentValue={projectName}
                     pdfValues={pdfValues}
+                        apiValues={apiValues}
                 />
                 <Input
                     value={projectName}
@@ -493,17 +789,34 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
             </div>
 
             <div>
+                <DiscrepancyLabel
+                    label="Owner Name"
+                    fieldKey="owner_name"
+                    currentValue={initialData?.owner_name ?? ''}
+                    pdfValues={pdfValues}
+                        apiValues={apiValues}
+                />
+                <Input
+                    value={initialData?.owner_name ?? ''}
+                    onChange={(e) => onDataChange({ owner_name: e.target.value })}
+                    placeholder="Auto-filled from PDF or API"
+                    className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                />
+            </div>
+
+            <div>
                 <div className="flex items-center justify-between mb-2">
                     <DiscrepancyLabel
                         label="Mobile Home Park Address"
                         fieldKey="mobile_home_park_address"
                         currentValue={value}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                         className="mb-0"
                     />
                     <Button
                         onClick={handleAutoFillClick}
-                        disabled={attomLoading || !value}
+                        disabled={attomLoading || (!value && !(initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber))}
                         variant="outline"
                         className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
                     >
@@ -553,6 +866,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="city"
                         currentValue={initialData?.city ?? ''}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         value={initialData?.city ?? ''}
@@ -567,6 +881,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="state"
                         currentValue={initialData?.state ?? ''}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         value={initialData?.state ?? ''}
@@ -581,6 +896,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="county"
                         currentValue={initialData?.county ?? ''}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         value={initialData?.county ?? ''}
@@ -595,6 +911,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="zip_code"
                         currentValue={initialData?.zip_code ?? ''}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         value={initialData?.zip_code ?? ''}
@@ -609,6 +926,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="fips_code"
                         currentValue={initialData?.fips_code ?? ''}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         value={initialData?.fips_code ?? ''}
@@ -623,6 +941,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="parcel_1"
                         currentValue={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         value={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
@@ -637,6 +956,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="parcel_1_acreage"
                         currentValue={(initialData?.parcel_1_acreage ?? '') || (initialData?.acreage ?? '')}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         type="number"
@@ -652,6 +972,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="year_built"
                         currentValue={initialData?.year_built ?? ''}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         type="number"
@@ -667,6 +988,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="property_type"
                         currentValue={initialData?.property_type ?? ''}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         value={initialData?.property_type ?? ''}
@@ -681,6 +1003,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                         fieldKey="last_sale_price"
                         currentValue={initialData?.last_sale_price ?? ''}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -722,6 +1045,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="population"
                             currentValue={initialData?.population ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             type="number"
@@ -736,6 +1060,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="population_change"
                             currentValue={initialData?.population_change ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -753,6 +1078,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="poverty_rate"
                             currentValue={initialData?.poverty_rate ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -770,6 +1096,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="median_household_income"
                             currentValue={initialData?.median_household_income ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -787,6 +1114,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="median_household_income_change"
                             currentValue={initialData?.median_household_income_change ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -804,6 +1132,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="number_of_employees"
                             currentValue={initialData?.number_of_employees ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             type="number"
@@ -818,6 +1147,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="number_of_employees_change"
                             currentValue={initialData?.number_of_employees_change ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -835,6 +1165,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="median_property_value"
                             currentValue={initialData?.median_property_value ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -852,6 +1183,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="median_property_value_change"
                             currentValue={initialData?.median_property_value_change ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -869,6 +1201,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="violent_crime"
                             currentValue={initialData?.violent_crime ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.violent_crime ?? ''}
@@ -882,6 +1215,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="property_crime"
                             currentValue={initialData?.property_crime ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.property_crime ?? ''}
@@ -895,6 +1229,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="two_br_rent"
                             currentValue={initialData?.two_br_rent ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -912,6 +1247,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="eli_renter_households"
                             currentValue={initialData?.eli_renter_households ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.eli_renter_households ?? ''}
@@ -925,6 +1261,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="units_per_100"
                             currentValue={initialData?.units_per_100 ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.units_per_100 ?? ''}
@@ -938,6 +1275,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
                             fieldKey="total_units"
                             currentValue={initialData?.total_units ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.total_units ?? ''}
@@ -970,7 +1308,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange }: Step1Pro
     );
 };
 
-export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData, onBusyChange }) => {
+export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData, onBusyChange, selectedApi }) => {
     const hasApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && !process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY.includes('placeholder');
     const [manualName, setManualName] = React.useState(initialData?.name ?? '');
     const [manualAddress, setManualAddress] = React.useState(initialData?.address ?? '');
@@ -979,6 +1317,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
     const [attomMessage, setAttomMessage] = React.useState<string | null>(null);
     const [showMoreDemographics, setShowMoreDemographics] = React.useState(false);
     const pdfValues = initialData?.pdf_values || {};
+    const apiValues = initialData?.api_values || {};
     const defaultValues = initialData?.default_values || {};
     const isEmptyValue = (value: any) =>
         value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
@@ -994,9 +1333,14 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
         normalizeComparable(currentValue) === normalizeComparable(defaultValues[key]);
     const isEmptyOrDefault = (key: string, currentValue: any) =>
         isEmptyValue(currentValue) || isDefaultValue(key, currentValue);
-    const shouldOverrideWithAttom = (currentValue: any, pdfValue: any, key: string) =>
-        isEmptyOrDefault(key, currentValue) ||
-        normalizeComparable(currentValue) === normalizeComparable(pdfValue);
+    const shouldFillWithAttom = (currentValue: any, key: string) => {
+        if (isEmptyOrDefault(key, currentValue)) return true;
+        const previousApiValue = apiValues?.[key];
+        if (!isEmptyValue(previousApiValue) && normalizeComparable(currentValue) === normalizeComparable(previousApiValue)) {
+            return true;
+        }
+        return false;
+    };
 
     React.useEffect(() => {
         if (typeof initialData?.mobile_home_park_name === 'string') {
@@ -1013,144 +1357,123 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
 
     React.useEffect(() => {
         onBusyChange?.(attomLoading);
-        return () => onBusyChange?.(false);
     }, [attomLoading, onBusyChange]);
 
     const fetchAttomData = async () => {
-        if (!manualAddress) return;
+        const existingApn = initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber;
+        if (!manualAddress && !initialData?.lat && !existingApn) return;
+        if (!selectedApi) {
+            setAttomError('Select an API source first.');
+            return;
+        }
         setAttomLoading(true);
         setAttomError(null);
         setAttomMessage(null);
         try {
-            const response = await fetch('/api/attom/property', {
+            const response = await fetch('/api/property/autofill', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: manualAddress }),
+                body: JSON.stringify({
+                    provider: selectedApi,
+                    intent: 'step1',
+                    address: manualAddress || initialData?.address || undefined,
+                    lat: initialData?.lat,
+                    lng: initialData?.lng,
+                    apn: existingApn || undefined,
+                    fips_code: initialData?.fips_code,
+                    county: initialData?.county,
+                    city: initialData?.city || extractCityFromAddressString(manualAddress),
+                    state: initialData?.state || extractStateFromAddressString(manualAddress),
+                    zip_code: initialData?.zip_code,
+                }),
             });
             const payload = await response.json();
             if (!response.ok) {
-                if (response.status === 404) {
-                    setAttomMessage('ATTOM: no results found');
-                    const updates: Record<string, any> = {};
-                    const pdfParcel = pdfValues.parcel_1 || pdfValues.parcelNumber;
-                    if (isEmptyOrDefault('parcel_1', initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
-                    if (isEmptyOrDefault('parcelNumber', initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
-                    if (isEmptyOrDefault('parcel_1_acreage', initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
-                        updates.parcel_1_acreage = pdfValues.parcel_1_acreage;
-                    }
-                    if (isEmptyOrDefault('acreage', initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
-                    if (isEmptyOrDefault('property_type', initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
-                    if (isEmptyOrDefault('year_built', initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
-                    if (isEmptyOrDefault('last_sale_price', initialData?.last_sale_price) && pdfValues.last_sale_price) {
-                        updates.last_sale_price = pdfValues.last_sale_price;
-                    }
-                    if (Object.keys(updates).length > 0) {
-                        onDataChange(updates);
-                    }
-                    return;
-                }
-                throw new Error(payload?.error || 'ATTOM request failed');
+                throw new Error(payload?.error || 'Auto-fill request failed');
             }
-            if (payload?.error) {
-                throw new Error(payload.error);
-            }
-            const statusMsg = payload?.status?.msg || payload?.status?.message;
-            const statusTotal = payload?.status?.total;
-            if (statusMsg === 'SuccessWithoutResult' || statusTotal === 0) {
-                setAttomMessage('ATTOM: no results found');
+
+            if (!payload?.apn_found) {
+                setAttomMessage(payload?.message || `No APN/Assessor ID found via address or coordinates for ${selectedApi}.`);
                 const updates: Record<string, any> = {};
                 const pdfParcel = pdfValues.parcel_1 || pdfValues.parcelNumber;
+                if (isEmptyOrDefault('owner_name', initialData?.owner_name) && pdfValues.owner_name) updates.owner_name = pdfValues.owner_name;
                 if (isEmptyOrDefault('parcel_1', initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
                 if (isEmptyOrDefault('parcelNumber', initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
-                if (isEmptyOrDefault('parcel_1_acreage', initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
-                    updates.parcel_1_acreage = pdfValues.parcel_1_acreage;
-                }
+                if (isEmptyOrDefault('parcel_1_acreage', initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) updates.parcel_1_acreage = pdfValues.parcel_1_acreage;
                 if (isEmptyOrDefault('acreage', initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
                 if (isEmptyOrDefault('property_type', initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
                 if (isEmptyOrDefault('year_built', initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
-                if (isEmptyOrDefault('last_sale_price', initialData?.last_sale_price) && pdfValues.last_sale_price) {
-                    updates.last_sale_price = pdfValues.last_sale_price;
-                }
-                if (Object.keys(updates).length > 0) {
-                    onDataChange(updates);
-                }
+                if (isEmptyOrDefault('last_sale_price', initialData?.last_sale_price) && pdfValues.last_sale_price) updates.last_sale_price = pdfValues.last_sale_price;
+                if (Object.keys(updates).length > 0) onDataChange(updates);
                 return;
             }
+
             const identity = payload?.property_identity || {};
             const financials = payload?.financials || {};
             const demographics = payload?.demographics_economics || {};
             const housing = payload?.housing_crisis_metrics || {};
             const demographicsDetails = payload?.demographics_details || null;
-            setAttomMessage(`AI: data found${payload?.source ? ` (${payload.source})` : ''}`);
-            const crimeDetails = demographicsDetails?.crime || {};
-            const violentCrimeValue = crimeDetails?.crime_Index ?? initialData?.crime_Index ?? demographics.violent_crime ?? null;
-            const propertyCrimeValue =
-                crimeDetails?.motor_Vehicle_Theft_Index ?? initialData?.motor_Vehicle_Theft_Index ?? demographics.property_crime ?? null;
+            const incomingSnapshot = sanitizeApiSnapshot(payload?.api_snapshot || {});
+
             const updates: Record<string, any> = {
                 mobile_home_park_name: manualName || initialData?.mobile_home_park_name,
-                population: demographics.population ?? initialData?.population,
-                population_change: demographics.population_change ?? initialData?.population_change,
-                median_household_income: demographics.median_household_income ?? initialData?.median_household_income,
-                median_household_income_change: demographics.median_household_income_change ?? initialData?.median_household_income_change,
-                poverty_rate: demographics.poverty_rate ?? initialData?.poverty_rate,
-                number_of_employees: demographics.number_of_employees ?? initialData?.number_of_employees,
-                number_of_employees_change: demographics.number_of_employees_change ?? initialData?.number_of_employees_change,
-                median_property_value: demographics.median_property_value ?? initialData?.median_property_value,
-                median_property_value_change: demographics.median_property_value_change ?? initialData?.median_property_value_change,
-                violent_crime: violentCrimeValue ?? initialData?.violent_crime,
-                property_crime: propertyCrimeValue ?? initialData?.property_crime,
-                two_br_rent: demographics.two_br_rent ?? initialData?.two_br_rent,
-                eli_renter_households: housing.eli_renter_households ?? initialData?.eli_renter_households,
-                units_per_100: housing.affordable_units_per_100 ?? initialData?.units_per_100,
-                total_units: housing.total_units ?? initialData?.total_units,
             };
-            if (demographicsDetails && !initialData?.demographics_details) {
+            const assignIfAllowed = (fieldKey: string, nextValue: any) => {
+                if (
+                    shouldApplyApiValue({
+                        fieldKey,
+                        nextValue,
+                        currentValue: initialData?.[fieldKey],
+                        defaultValues,
+                        previousApiValues: apiValues,
+                    })
+                ) {
+                    updates[fieldKey] = nextValue;
+                }
+            };
+
+            assignIfAllowed('owner_name', identity.owner);
+            assignIfAllowed('fips_code', identity.fips_code);
+            assignIfAllowed('parcelNumber', identity.apn);
+            assignIfAllowed('parcel_1', identity.apn);
+            assignIfAllowed('acreage', identity.acreage);
+            assignIfAllowed('parcel_1_acreage', identity.acreage);
+            assignIfAllowed('year_built', identity.year_built);
+            assignIfAllowed('property_type', identity.property_type);
+            assignIfAllowed('last_sale_price', financials.last_sale_price);
+            assignIfAllowed('population', demographics.population);
+            assignIfAllowed('population_change', demographics.population_change);
+            assignIfAllowed('median_household_income', demographics.median_household_income);
+            assignIfAllowed('median_household_income_change', demographics.median_household_income_change);
+            assignIfAllowed('poverty_rate', demographics.poverty_rate);
+            assignIfAllowed('number_of_employees', demographics.number_of_employees);
+            assignIfAllowed('number_of_employees_change', demographics.number_of_employees_change);
+            assignIfAllowed('median_property_value', demographics.median_property_value);
+            assignIfAllowed('median_property_value_change', demographics.median_property_value_change);
+            assignIfAllowed('violent_crime', demographics.violent_crime);
+            assignIfAllowed('property_crime', demographics.property_crime);
+            assignIfAllowed('two_br_rent', demographics.two_br_rent);
+            assignIfAllowed('eli_renter_households', housing.eli_renter_households);
+            assignIfAllowed('units_per_100', housing.affordable_units_per_100);
+            assignIfAllowed('total_units', housing.total_units);
+
+            if (demographicsDetails && shouldFillWithAttom(initialData?.demographics_details, 'demographics_details')) {
                 updates.demographics_details = demographicsDetails;
             }
-            if (identity.fips_code && isEmptyOrDefault('fips_code', initialData?.fips_code)) {
-                updates.fips_code = identity.fips_code;
-            }
-            if (identity.apn && shouldOverrideWithAttom(initialData?.parcelNumber, pdfValues.parcelNumber, 'parcelNumber')) {
-                updates.parcelNumber = identity.apn;
-            }
-            if (identity.apn && shouldOverrideWithAttom(initialData?.parcel_1, pdfValues.parcel_1, 'parcel_1')) {
-                updates.parcel_1 = identity.apn;
-            }
-            if (identity.acreage && shouldOverrideWithAttom(initialData?.acreage, pdfValues.acreage, 'acreage')) {
-                updates.acreage = identity.acreage;
-            }
-            if (identity.acreage && shouldOverrideWithAttom(initialData?.parcel_1_acreage, pdfValues.parcel_1_acreage, 'parcel_1_acreage')) {
-                updates.parcel_1_acreage = identity.acreage;
-            }
-            if (identity.year_built && shouldOverrideWithAttom(initialData?.year_built, pdfValues.year_built, 'year_built')) {
-                updates.year_built = identity.year_built;
-            }
-            if (identity.property_type && shouldOverrideWithAttom(initialData?.property_type, pdfValues.property_type, 'property_type')) {
-                updates.property_type = identity.property_type;
-            }
-            if (financials.last_sale_price && shouldOverrideWithAttom(initialData?.last_sale_price, pdfValues.last_sale_price, 'last_sale_price')) {
-                updates.last_sale_price = financials.last_sale_price;
-            }
-            onDataChange(updates);
-        } catch (error: any) {
-            console.error('ATTOM fetch failed:', error);
-            setAttomError(error.message || 'ATTOM request failed');
-            const updates: Record<string, any> = {};
-            const pdfParcel = pdfValues.parcel_1 || pdfValues.parcelNumber;
-            if (isEmptyOrDefault('parcel_1', initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
-            if (isEmptyOrDefault('parcelNumber', initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
-            if (isEmptyOrDefault('parcel_1_acreage', initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
-                updates.parcel_1_acreage = pdfValues.parcel_1_acreage;
-            }
-            if (isEmptyOrDefault('acreage', initialData?.acreage) && pdfValues.acreage) updates.acreage = pdfValues.acreage;
-            if (isEmptyOrDefault('property_type', initialData?.property_type) && pdfValues.property_type) updates.property_type = pdfValues.property_type;
-            if (isEmptyOrDefault('year_built', initialData?.year_built) && pdfValues.year_built) updates.year_built = pdfValues.year_built;
-            if (isEmptyOrDefault('last_sale_price', initialData?.last_sale_price) && pdfValues.last_sale_price) {
-                updates.last_sale_price = pdfValues.last_sale_price;
+
+            if (Object.keys(incomingSnapshot).length > 0) {
+                updates.api_values = {
+                    ...(initialData?.api_values || {}),
+                    ...incomingSnapshot,
+                };
             }
             if (Object.keys(updates).length > 0) {
                 onDataChange(updates);
             }
+            setAttomMessage(payload?.message || 'AI: data found.');
+        } catch (error: any) {
+            console.warn('Autofill failed:', error?.message || error);
+            setAttomError(error.message || 'Auto-fill request failed');
         } finally {
             setAttomLoading(false);
         }
@@ -1178,6 +1501,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                         fieldKey="mobile_home_park_name"
                         currentValue={manualName}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         value={manualName}
@@ -1201,6 +1525,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                         fieldKey="mobile_home_park_address"
                         currentValue={manualAddress}
                         pdfValues={pdfValues}
+                        apiValues={apiValues}
                     />
                     <Input
                         value={manualAddress}
@@ -1226,10 +1551,26 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                     />
                 </div>
 
+                <div>
+                    <DiscrepancyLabel
+                        label="Owner Name"
+                        fieldKey="owner_name"
+                        currentValue={initialData?.owner_name ?? ''}
+                        pdfValues={pdfValues}
+                        apiValues={apiValues}
+                    />
+                    <Input
+                        value={initialData?.owner_name ?? ''}
+                        onChange={(e) => onDataChange({ owner_name: e.target.value })}
+                        placeholder="Auto-filled from PDF or API"
+                        className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
+                    />
+                </div>
+
                 <div className="flex items-center gap-3">
                     <Button
                         onClick={fetchAttomData}
-                        disabled={attomLoading || !manualAddress}
+                        disabled={attomLoading || (!manualAddress && !(initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber))}
                         variant="outline"
                         className="border-blue-500 text-blue-500 hover:bg-blue-500/10"
                     >
@@ -1250,6 +1591,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="city"
                             currentValue={initialData?.city ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.city ?? ''}
@@ -1264,6 +1606,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="state"
                             currentValue={initialData?.state ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.state ?? ''}
@@ -1278,6 +1621,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="county"
                             currentValue={initialData?.county ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.county ?? ''}
@@ -1292,6 +1636,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="zip_code"
                             currentValue={initialData?.zip_code ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.zip_code ?? ''}
@@ -1306,6 +1651,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="fips_code"
                             currentValue={initialData?.fips_code ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.fips_code ?? ''}
@@ -1320,6 +1666,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="parcel_1"
                             currentValue={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
@@ -1334,6 +1681,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="parcel_1_acreage"
                             currentValue={(initialData?.parcel_1_acreage ?? '') || (initialData?.acreage ?? '')}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             type="number"
@@ -1349,6 +1697,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="year_built"
                             currentValue={initialData?.year_built ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             type="number"
@@ -1364,6 +1713,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="property_type"
                             currentValue={initialData?.property_type ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={initialData?.property_type ?? ''}
@@ -1378,6 +1728,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="last_sale_price"
                             currentValue={initialData?.last_sale_price ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -1401,6 +1752,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                                 fieldKey="population"
                                 currentValue={initialData?.population ?? ''}
                                 pdfValues={pdfValues}
+                        apiValues={apiValues}
                             />
                         <Input
                             type="number"
@@ -1415,6 +1767,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="population_change"
                             currentValue={initialData?.population_change ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -1432,6 +1785,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="poverty_rate"
                             currentValue={initialData?.poverty_rate ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -1449,6 +1803,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="median_household_income"
                             currentValue={initialData?.median_household_income ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -1466,6 +1821,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="median_household_income_change"
                             currentValue={initialData?.median_household_income_change ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -1483,6 +1839,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                                 fieldKey="number_of_employees"
                                 currentValue={initialData?.number_of_employees ?? ''}
                                 pdfValues={pdfValues}
+                        apiValues={apiValues}
                             />
                         <Input
                             type="number"
@@ -1497,6 +1854,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="number_of_employees_change"
                             currentValue={initialData?.number_of_employees_change ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -1514,6 +1872,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="median_property_value"
                             currentValue={initialData?.median_property_value ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -1531,6 +1890,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="median_property_value_change"
                             currentValue={initialData?.median_property_value_change ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <Input
@@ -1548,6 +1908,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                                 fieldKey="violent_crime"
                                 currentValue={initialData?.violent_crime ?? ''}
                                 pdfValues={pdfValues}
+                        apiValues={apiValues}
                             />
                             <Input
                                 value={initialData?.violent_crime ?? ''}
@@ -1561,6 +1922,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                                 fieldKey="property_crime"
                                 currentValue={initialData?.property_crime ?? ''}
                                 pdfValues={pdfValues}
+                        apiValues={apiValues}
                             />
                             <Input
                                 value={initialData?.property_crime ?? ''}
@@ -1574,6 +1936,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                             fieldKey="two_br_rent"
                             currentValue={initialData?.two_br_rent ?? ''}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
@@ -1591,6 +1954,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                                 fieldKey="eli_renter_households"
                                 currentValue={initialData?.eli_renter_households ?? ''}
                                 pdfValues={pdfValues}
+                        apiValues={apiValues}
                             />
                             <Input
                                 value={initialData?.eli_renter_households ?? ''}
@@ -1604,6 +1968,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                                 fieldKey="units_per_100"
                                 currentValue={initialData?.units_per_100 ?? ''}
                                 pdfValues={pdfValues}
+                        apiValues={apiValues}
                             />
                             <Input
                                 value={initialData?.units_per_100 ?? ''}
@@ -1617,6 +1982,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                                 fieldKey="total_units"
                                 currentValue={initialData?.total_units ?? ''}
                                 pdfValues={pdfValues}
+                        apiValues={apiValues}
                             />
                             <Input
                                 value={initialData?.total_units ?? ''}
@@ -1649,5 +2015,5 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
         );
     }
 
-    return <GooglePlacesInput onDataChange={onDataChange} initialData={initialData} onBusyChange={onBusyChange} />;
+    return <GooglePlacesInput onDataChange={onDataChange} initialData={initialData} onBusyChange={onBusyChange} selectedApi={selectedApi} />;
 };

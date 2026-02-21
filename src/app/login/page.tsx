@@ -12,26 +12,18 @@ export default function LoginPage() {
 
     const handleGoogleLogin = async () => {
         setLoading(true);
-        const { data, error } = await supabase.auth.signInWithOAuth({
+        const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
                 redirectTo: `${window.location.origin}/auth/callback`,
-                skipBrowserRedirect: true,
             },
         });
-
-        if (data?.url) {
-            window.location.assign(data.url);
-            return;
-        }
 
         if (error) {
             console.error('Error logging in:', error.message);
             setLoading(false);
             return;
         }
-
-        setLoading(false);
     };
 
     // Note: Manual email/pass login logic omitted as per instructions "solo gmail", 

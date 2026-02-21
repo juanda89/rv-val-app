@@ -17,6 +17,7 @@ import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { BarChart3 } from 'lucide-react';
 import { PNL_LABELS } from '@/config/pnlMapping';
 import { SHEET_MAPPING } from '@/config/sheetMapping';
+import type { ApiProvider } from '@/types/apiProvider';
 
 const STEPS = [
     { id: 1, title: 'Property Basics', icon: 'domain' },
@@ -41,6 +42,7 @@ export const WizardLayout = ({
     const [mounted, setMounted] = useState(false);
     const [currentStep, setCurrentStep] = useState(1);
     const [formData, setFormData] = useState<any>(initialData || {});
+    const [selectedApi, setSelectedApi] = useState<ApiProvider | null>('melissa');
     const [outputs, setOutputs] = useState<any>(null); // Store sync results
     const [projectId, setProjectId] = useState<string | null>(initialProjectId || null);
     const [creatingProject, setCreatingProject] = useState(false);
@@ -59,7 +61,22 @@ export const WizardLayout = ({
     const pendingSyncRef = useRef<Record<string, any>>({});
     const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const syncInFlightRef = useRef(false);
-    const inputKeys = useRef(new Set(Object.keys(SHEET_MAPPING.inputs).filter(k => k !== 'sheetName'))).current;
+    const nonSheetKeys = useRef(
+        new Set([
+            'pdf_values',
+            'api_values',
+            'default_values',
+            'demographics_details',
+            'outputs',
+            'pnl_income_items',
+            'pnl_expense_items',
+            'pnl_grouped_income',
+            'pnl_grouped_expenses',
+            'pnl_income_assignments',
+            'pnl_expense_assignments',
+            'attom_initial_autofill_done',
+        ])
+    ).current;
     const isEmptyValue = (value: any) =>
         value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
     const createItemId = () => {
@@ -161,12 +178,14 @@ export const WizardLayout = ({
     const pickMappedInputs = React.useCallback((data: Record<string, any>) => {
         const mapped: Record<string, any> = {};
         Object.entries(data).forEach(([key, value]) => {
-            if (inputKeys.has(key)) {
-                mapped[key] = value;
-            }
+            if (nonSheetKeys.has(key)) return;
+            if (value === undefined) return;
+            if (typeof value === 'function') return;
+            if (value !== null && typeof value === 'object') return;
+            mapped[key] = value;
         });
         return mapped;
-    }, [inputKeys]);
+    }, [nonSheetKeys]);
 
     const flushPendingSync = React.useCallback(async (payload?: Record<string, any>) => {
         if (!projectId) return;
@@ -272,6 +291,7 @@ export const WizardLayout = ({
             1: [
                 'name',
                 'mobile_home_park_name',
+                'owner_name',
                 'city',
                 'state',
                 'county',
@@ -694,6 +714,8 @@ export const WizardLayout = ({
                     <ValuationUploadPanel
                         onAutofill={handleAutofill}
                         onBusyChange={handleUploadBusy}
+                        selectedApi={selectedApi}
+                        onApiChange={setSelectedApi}
                     />
                 )}
 
@@ -741,6 +763,7 @@ export const WizardLayout = ({
                                 onDataChange={handleDataChange}
                                 initialData={formData}
                                 onBusyChange={handleAttomBusy}
+                                selectedApi={selectedApi}
                             />
                         )}
                         {currentStep === 2 && <Step2RentRoll onDataChange={handleDataChange} initialData={formData} />}
@@ -759,6 +782,7 @@ export const WizardLayout = ({
                                 initialData={formData}
                                 address={formData.address}
                                 onBusyChange={handleTaxesBusy}
+                                selectedApi={selectedApi}
                             />
                         )}
                         {currentStep === 6 && (

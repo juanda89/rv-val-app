@@ -2,12 +2,16 @@
 
 import React, { useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import type { ApiProvider } from '@/types/apiProvider';
+import { API_PROVIDER_LABELS } from '@/types/apiProvider';
 
 type UploadStatus = 'idle' | 'loading' | 'success' | 'error';
 
 interface ValuationUploadPanelProps {
     onAutofill: (data: Record<string, any>) => Promise<void> | void;
     onBusyChange?: (busy: boolean) => void;
+    selectedApi: ApiProvider | null;
+    onApiChange: (provider: ApiProvider | null) => void;
 }
 
 const SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf'];
@@ -16,7 +20,12 @@ const STORAGE_BUCKET = 'valuation-uploads';
 const sanitizeFileName = (name: string) =>
     name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
 
-export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAutofill, onBusyChange }) => {
+export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
+    onAutofill,
+    onBusyChange,
+    selectedApi,
+    onApiChange,
+}) => {
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [status, setStatus] = useState<UploadStatus>('idle');
     const [message, setMessage] = useState('');
@@ -30,7 +39,6 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
 
     React.useEffect(() => {
         busyCallbackRef.current?.(status === 'loading');
-        return () => busyCallbackRef.current?.(false);
     }, [status]);
 
     const reset = () => {
@@ -75,29 +83,62 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
         return publicUrl.publicUrl;
     };
 
+    const parseJsonSafely = async (response: Response) => {
+        try {
+            return await response.json();
+        } catch {
+            return {};
+        }
+    };
+
+    const analyzeViaStorageUrl = async (file: File) => {
+        const fileUrl = await uploadToStorage(file);
+        const response = await fetch('/api/valuation/analyze-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fileUrl,
+                fileName: file.name,
+                mimeType: file.type || ''
+            })
+        });
+        const payload = await parseJsonSafely(response);
+        if (!response.ok) {
+            throw new Error(payload.error || 'Unable to analyze document');
+        }
+        return payload?.data || {};
+    };
+
+    const analyzeViaDirectUpload = async (file: File) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch('/api/valuation/analyze', {
+            method: 'POST',
+            body: formData,
+        });
+        const payload = await parseJsonSafely(response);
+        if (!response.ok) {
+            throw new Error(payload.error || 'Unable to analyze document');
+        }
+        return payload?.data || {};
+    };
+
     const processFile = async (file: File) => {
         setStatus('loading');
         setMessage('Uploading file and analyzing with AI...');
         setFileName(file.name);
 
         try {
-            const fileUrl = await uploadToStorage(file);
-            const response = await fetch('/api/valuation/analyze-url', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    fileUrl,
-                    fileName: file.name,
-                    mimeType: file.type || ''
-                })
-            });
-
-            const payload = await response.json();
-            if (!response.ok) {
-                throw new Error(payload.error || 'Unable to analyze document');
+            let analyzedData: Record<string, any> | null = null;
+            try {
+                analyzedData = await analyzeViaStorageUrl(file);
+            } catch (storagePathError: any) {
+                console.warn('Storage-based analyze failed, falling back to direct upload:', storagePathError?.message || storagePathError);
+                setMessage('Primary upload failed. Retrying with direct analysis...');
+                analyzedData = await analyzeViaDirectUpload(file);
             }
 
-            await onAutofill(payload.data || {});
+            await onAutofill(analyzedData || {});
             setStatus('success');
             setMessage('Documento analizado correctamente. Los campos disponibles han sido completados.');
         } catch (error: any) {
@@ -123,6 +164,11 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
         if (status === 'loading') return;
         setIsDragging(false);
         await handleFileSelect(event.dataTransfer.files?.[0]);
+    };
+
+    const handleApiToggle = (target: ApiProvider) => {
+        if (selectedApi === target) return;
+        onApiChange(target);
     };
 
     return (
@@ -214,6 +260,41 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({ onAu
 
                 <div className="text-[11px] text-slate-500 dark:text-gray-500">
                     Supported formats: {SUPPORTED_EXTENSIONS.join(', ').toUpperCase()}
+                </div>
+
+                <div className="border-t border-slate-200 dark:border-[#283339] pt-5 space-y-3">
+                    <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-gray-300">
+                            API Sources
+                        </h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2">
+                        {(['melissa', 'attom', 'rentcast', 'reportallusa'] as ApiProvider[]).map((provider) => {
+                            const isOn = selectedApi === provider;
+                            return (
+                                <button
+                                    key={provider}
+                                    type="button"
+                                    onClick={() => handleApiToggle(provider)}
+                                    className={`w-full flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                                        isOn
+                                            ? 'border-[#13a4ec] bg-[#13a4ec]/10 text-[#13a4ec]'
+                                            : 'border-slate-300 dark:border-[#283339] bg-white dark:bg-[#141b21] text-slate-600 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-[#192229]'
+                                    }`}
+                                >
+                                    <span>{API_PROVIDER_LABELS[provider]}</span>
+                                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] ${
+                                        isOn
+                                            ? 'bg-[#13a4ec] text-white'
+                                            : 'bg-slate-200 text-slate-600 dark:bg-[#283339] dark:text-gray-300'
+                                    }`}>
+                                        {isOn ? 'ON' : 'OFF'}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
         </aside>

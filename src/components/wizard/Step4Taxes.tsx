@@ -4,12 +4,15 @@ import React, { useState, useEffect } from 'react';
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { DiscrepancyLabel } from "@/components/ui/DiscrepancyLabel";
+import type { ApiProvider } from '@/types/apiProvider';
+import { shouldApplyApiValue, sanitizeApiSnapshot } from '@/lib/apiAutofillMerge';
 
 interface Step4Props {
     onDataChange: (data: any) => void;
     initialData?: any;
     address?: string;
     onBusyChange?: (busy: boolean) => void;
+    selectedApi?: ApiProvider | null;
 }
 
 const formatThousands = (value: string | number) => {
@@ -23,10 +26,25 @@ const formatThousands = (value: string | number) => {
 
 const normalizeCurrencyInput = (value: string) => value.replace(/[^\d.]/g, '');
 
-export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, address, onBusyChange }) => {
+export const Step4Taxes: React.FC<Step4Props> = ({
+    onDataChange,
+    initialData,
+    address,
+    onBusyChange,
+    selectedApi,
+}) => {
     const pdfValues = initialData?.pdf_values || {};
-    const hasParcel = Boolean(initialData?.parcelNumber || initialData?.parcel_1);
-    const canFetchAttom = Boolean(address || hasParcel);
+    const apiValues = initialData?.api_values || {};
+    const hasParcel = Boolean(
+        initialData?.parcelNumber ||
+        initialData?.parcel_1 ||
+        initialData?.pdf_values?.parcel_1 ||
+        initialData?.pdf_values?.parcelNumber
+    );
+    const hasCoordinates = initialData?.lat !== undefined && initialData?.lng !== undefined;
+    const resolvedAddress = address || initialData?.address || initialData?.mobile_home_park_address || '';
+    const canFetchProvider = Boolean(selectedApi && (resolvedAddress || hasParcel || hasCoordinates));
+    const defaultValues = initialData?.default_values || {};
     const [data, setData] = useState({
         tax_assessed_value: initialData?.tax_assessed_value ?? '',
         tax_year: initialData?.tax_year ?? '',
@@ -53,10 +71,10 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [message, setMessage] = useState<string | null>(null);
 
     useEffect(() => {
         onBusyChange?.(loading);
-        return () => onBusyChange?.(false);
     }, [loading, onBusyChange]);
 
     useEffect(() => {
@@ -137,47 +155,93 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
         initialData?.hold_period,
     ]);
 
-    const fetchAttomData = async () => {
-        if (!address && !initialData?.parcelNumber && !initialData?.parcel_1) return;
+    const fetchProviderData = async () => {
+        if (!selectedApi) {
+            setError('Select an API source first.');
+            return;
+        }
+        const existingApn = initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber;
+        if (!existingApn) {
+            setError('APN is required for taxes auto-fill. Add APN manually or run Step 1 AI Auto-Fill first.');
+            return;
+        }
+        if (!resolvedAddress && !hasCoordinates) return;
         setLoading(true);
         setError(null);
+        setMessage(null);
         try {
-            const res = await fetch('/api/attom/property', {
+            const res = await fetch('/api/property/autofill', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    address,
-                    apn: initialData?.parcelNumber || initialData?.parcel_1,
-                    fips: initialData?.fips_code,
+                    provider: selectedApi,
+                    intent: 'taxes',
+                    address: resolvedAddress || undefined,
+                    lat: initialData?.lat,
+                    lng: initialData?.lng,
+                    apn: existingApn,
+                    fips_code: initialData?.fips_code,
+                    county: initialData?.county,
+                    city: initialData?.city,
+                    state: initialData?.state,
+                    zip_code: initialData?.zip_code,
                 }),
             });
             const json = await res.json();
 
             if (!res.ok) {
-                throw new Error(json?.error || 'ATTOM request failed');
+                throw new Error(json?.error || 'Auto-fill request failed');
             }
 
+            if (!json?.apn_found) {
+                throw new Error(json?.message || `No APN/Assessor ID found via address or coordinates for ${selectedApi}.`);
+            }
+
+            const apiSnapshot = sanitizeApiSnapshot(json?.api_snapshot || {});
             const financials = json?.financials || {};
+            const incoming: Record<string, any> = {
+                tax_assessed_value: apiSnapshot.tax_assessed_value ?? apiSnapshot.assessed_value ?? financials.assessed_value,
+                assessed_value: apiSnapshot.assessed_value ?? apiSnapshot.tax_assessed_value ?? financials.assessed_value,
+                tax_year: apiSnapshot.tax_year ?? financials.tax_year,
+                tax_assessment_rate: apiSnapshot.tax_assessment_rate ?? financials.assessment_ratio,
+                tax_millage_rate: apiSnapshot.tax_millage_rate ?? financials.millage_rate,
+                tax_prev_year_amount: apiSnapshot.tax_prev_year_amount ?? financials.tax_prev_year_amount ?? financials.tax_amount,
+                previous_year_re_taxes: apiSnapshot.previous_year_re_taxes ?? apiSnapshot.tax_prev_year_amount ?? financials.tax_prev_year_amount ?? financials.tax_amount,
+                fair_market_value: apiSnapshot.fair_market_value ?? financials.market_value,
+                us_10_year_treasury: apiSnapshot.us_10_year_treasury ?? financials.us_10_year_treasury,
+            };
 
             setData((prev) => {
-                const assessedValue = financials.assessed_value ?? prev.tax_assessed_value ?? prev.assessed_value;
-                const previousTaxAmount = financials.tax_prev_year_amount ?? financials.tax_amount ?? prev.tax_prev_year_amount;
-                return {
-                    ...prev,
-                    tax_assessed_value: assessedValue ?? prev.tax_assessed_value,
-                    tax_year: financials.tax_year ?? prev.tax_year,
-                    tax_prev_year_amount: previousTaxAmount ?? prev.tax_prev_year_amount,
-                    tax_millage_rate: financials.millage_rate ?? prev.tax_millage_rate,
-                    tax_assessment_rate: financials.assessment_ratio ?? prev.tax_assessment_rate,
-                    fair_market_value: financials.market_value ?? prev.fair_market_value,
-                    assessed_value: assessedValue ?? prev.assessed_value,
-                    previous_year_re_taxes: previousTaxAmount ?? prev.previous_year_re_taxes,
-                    us_10_year_treasury: financials.us_10_year_treasury ?? prev.us_10_year_treasury,
-                };
+                const next = { ...prev };
+                Object.entries(incoming).forEach(([fieldKey, nextValue]) => {
+                    if (
+                        shouldApplyApiValue({
+                            fieldKey,
+                            nextValue,
+                            currentValue: prev[fieldKey as keyof typeof prev],
+                            defaultValues,
+                            previousApiValues: apiValues,
+                        })
+                    ) {
+                        (next as any)[fieldKey] = nextValue;
+                    }
+                });
+                return next;
             });
+
+            if (Object.keys(apiSnapshot).length > 0) {
+                onDataChange({
+                    api_values: {
+                        ...(initialData?.api_values || {}),
+                        ...apiSnapshot,
+                    },
+                });
+            }
+
+            setMessage(json?.message || 'AI Auto-Fill completed.');
         } catch (err: any) {
             console.error(err);
-            setError(err.message || 'ATTOM request failed');
+            setError(err.message || 'Auto-fill request failed');
         } finally {
             setLoading(false);
         }
@@ -208,11 +272,21 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Taxes</h2>
                         <p className="text-sm text-slate-500 dark:text-gray-400">Configure tax assumptions for Year 2.</p>
                     </div>
-                    <Button onClick={fetchAttomData} disabled={loading || !canFetchAttom} variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-500/10">
+                    <Button onClick={fetchProviderData} disabled={loading || !canFetchProvider} variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-500/10">
                         {loading ? "Fetching..." : "AI Auto-Fill"}
                     </Button>
                 </div>
             </div>
+            {message && (
+                <div className="p-3 bg-blue-500/10 border border-blue-500/40 rounded-lg text-blue-600 dark:text-blue-300 text-sm">
+                    {message}
+                </div>
+            )}
+            {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/40 rounded-lg text-red-600 dark:text-red-300 text-sm">
+                    {error}
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -221,6 +295,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="tax_assessed_value"
                         currentValue={data.tax_assessed_value}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <div className="relative">
                         <span className="absolute left-3 top-2 text-slate-400">$</span>
@@ -240,6 +315,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="tax_year"
                         currentValue={data.tax_year}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         type="number"
@@ -256,6 +332,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="tax_assessment_rate"
                         currentValue={data.tax_assessment_rate}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <div className="relative">
                         <Input
@@ -276,6 +353,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="tax_millage_rate"
                         currentValue={data.tax_millage_rate}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         type="number"
@@ -293,6 +371,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="tax_prev_year_amount"
                         currentValue={data.tax_prev_year_amount}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <div className="relative">
                         <span className="absolute left-3 top-2 text-slate-400">$</span>
@@ -316,6 +395,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                             fieldKey="fair_market_value"
                             currentValue={data.fair_market_value}
                             pdfValues={pdfValues}
+                        apiValues={apiValues}
                         />
                         <Input
                             value={formatThousands(data.fair_market_value)}
@@ -333,6 +413,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="us_10_year_treasury"
                         currentValue={data.us_10_year_treasury}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.us_10_year_treasury}
@@ -346,6 +427,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="spread"
                         currentValue={data.spread}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.spread}
@@ -359,6 +441,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="spread_escalation_allowance"
                         currentValue={data.spread_escalation_allowance}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.spread_escalation_allowance}
@@ -372,6 +455,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="dscr"
                         currentValue={data.dscr}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.dscr}
@@ -385,6 +469,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="max_ltc"
                         currentValue={data.max_ltc}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.max_ltc}
@@ -398,6 +483,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="loan_term"
                         currentValue={data.loan_term}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.loan_term}
@@ -411,6 +497,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="interest_only_time_period"
                         currentValue={data.interest_only_time_period}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.interest_only_time_period}
@@ -424,6 +511,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="cap_rate_decompression"
                         currentValue={data.cap_rate_decompression}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.cap_rate_decompression}
@@ -437,6 +525,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="preferred_return"
                         currentValue={data.preferred_return}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.preferred_return}
@@ -450,6 +539,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="lp_split"
                         currentValue={data.lp_split}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.lp_split}
@@ -463,6 +553,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="gp_split"
                         currentValue={data.gp_split}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.gp_split}
@@ -476,6 +567,7 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                         fieldKey="hold_period"
                         currentValue={data.hold_period}
                         pdfValues={pdfValues}
+                    apiValues={apiValues}
                     />
                     <Input
                         value={data.hold_period}
@@ -484,12 +576,6 @@ export const Step4Taxes: React.FC<Step4Props> = ({ onDataChange, initialData, ad
                     />
                 </div>
             </div>
-
-            {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-600 dark:text-red-400 text-sm">
-                    {error}
-                </div>
-            )}
         </div>
     );
 };

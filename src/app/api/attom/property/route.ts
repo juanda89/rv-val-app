@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchCountyFips } from '@/lib/censusFips';
 import { lookupHudChas } from '@/lib/hudChas';
 
 export const runtime = 'nodejs';
@@ -173,54 +174,6 @@ const extractFips = (property: Record<string, any>) => {
     return null;
 };
 
-const STATE_FIPS: Record<string, string> = {
-    AL: '01', AK: '02', AZ: '04', AR: '05', CA: '06', CO: '08', CT: '09', DE: '10', DC: '11',
-    FL: '12', GA: '13', HI: '15', ID: '16', IL: '17', IN: '18', IA: '19', KS: '20', KY: '21',
-    LA: '22', ME: '23', MD: '24', MA: '25', MI: '26', MN: '27', MS: '28', MO: '29', MT: '30',
-    NE: '31', NV: '32', NH: '33', NJ: '34', NM: '35', NY: '36', NC: '37', ND: '38', OH: '39',
-    OK: '40', OR: '41', PA: '42', RI: '44', SC: '45', SD: '46', TN: '47', TX: '48', UT: '49',
-    VT: '50', VA: '51', WA: '53', WV: '54', WI: '55', WY: '56',
-};
-
-const normalizeCountyName = (value: string) =>
-    value
-        .toLowerCase()
-        .replace(/\s+county$/i, '')
-        .replace(/\s+parish$/i, '')
-        .replace(/\s+borough$/i, '')
-        .replace(/\s+census\s+area$/i, '')
-        .replace(/\s+municipality$/i, '')
-        .replace(/[^a-z0-9]+/g, ' ')
-        .trim();
-
-const fetchCountyFips = async (state: string | null, county: string | null) => {
-    if (!state || !county) return null;
-    const stateCode = STATE_FIPS[state.toUpperCase()];
-    if (!stateCode) return null;
-    const params = new URLSearchParams();
-    params.set('get', 'NAME');
-    params.set('for', 'county:*');
-    params.set('in', `state:${stateCode}`);
-    if (process.env.CENSUS_API_KEY) {
-        params.set('key', process.env.CENSUS_API_KEY);
-    }
-    const response = await fetch(`https://api.census.gov/data/2022/acs/acs5?${params.toString()}`);
-    if (!response.ok) return null;
-    const payload = await response.json();
-    const rows = Array.isArray(payload) ? payload.slice(1) : [];
-    const target = normalizeCountyName(county);
-    for (const row of rows) {
-        const name = String(row?.[0] ?? '');
-        const countyFips = String(row?.[2] ?? '').padStart(3, '0');
-        if (!name || !countyFips) continue;
-        const normalized = normalizeCountyName(name);
-        if (normalized === target) {
-            return `${stateCode}${countyFips}`;
-        }
-    }
-    return null;
-};
-
 const calculatePercentChange = (current: number | null, previous: number | null) => {
     if (current === null || previous === null || previous === 0) return null;
     return Number((((current - previous) / previous) * 100).toFixed(2));
@@ -252,6 +205,109 @@ const splitAddress = (value: string) => {
         address1: normalized,
         address2: '',
     };
+};
+
+const buildFullName = (first?: string | null, last?: string | null) => {
+    const f = String(first || '').trim();
+    const l = String(last || '').trim();
+    const full = `${f} ${l}`.trim();
+    return full || null;
+};
+
+const extractOwnerName = (property: Record<string, any>) => {
+    const owner = property?.owner || property?.ownership || property?.ownerInfo || {};
+    const owner1 = owner?.owner1 || {};
+    const owner2 = owner?.owner2 || {};
+    const ownerList = Array.isArray(owner?.owners) ? owner.owners : [];
+    const ownerCandidates = new Set<string>();
+
+    const addCandidate = (value: unknown) => {
+        if (value === null || value === undefined) return;
+        const normalized = String(value).trim();
+        if (!normalized) return;
+        ownerCandidates.add(normalized);
+    };
+
+    const blockedOwnerKeyPattern =
+        /(mail|address|city|state|zip|postal|phone|email|id|type|company|corporate|careof|care_of)/i;
+    const explicitOwnerKeyPattern =
+        /(ownername|owner_name|owner\d+name|ownerfull|owner_full|owner1|owner2|primaryowner|secondaryowner|beneficialowner)/i;
+
+    const collectOwnerCandidates = (node: any, depth = 0, ownerContext = false) => {
+        if (!node || depth > 4) return;
+        if (Array.isArray(node)) {
+            node.forEach((entry) => collectOwnerCandidates(entry, depth + 1, ownerContext));
+            return;
+        }
+        if (typeof node !== 'object') return;
+
+        for (const [rawKey, rawValue] of Object.entries(node)) {
+            const key = String(rawKey).toLowerCase();
+            const inOwnerContext = ownerContext || key.includes('owner');
+            if (typeof rawValue === 'string') {
+                const isNameKey = /(^name$|full.?name|first.?name|last.?name|display.?name)/i.test(key);
+                const isExplicitOwnerKey = explicitOwnerKeyPattern.test(key);
+                if ((inOwnerContext && !blockedOwnerKeyPattern.test(key)) || isExplicitOwnerKey || (ownerContext && isNameKey)) {
+                    addCandidate(rawValue);
+                }
+                continue;
+            }
+            if (typeof rawValue === 'number') {
+                continue;
+            }
+            if (rawValue && typeof rawValue === 'object') {
+                collectOwnerCandidates(rawValue, depth + 1, inOwnerContext);
+            }
+        }
+    };
+
+    const ownerFromList = ownerList
+        .map((entry: any) =>
+            entry?.fullName ||
+            entry?.name ||
+            entry?.ownerName ||
+            buildFullName(entry?.firstName, entry?.lastName) ||
+            null
+        )
+        .filter(Boolean)
+        .join(' & ');
+
+    const directCandidates = [
+        owner?.name,
+        owner?.ownerName,
+        owner?.owner_name,
+        owner?.owner1FullName,
+        owner?.owner2FullName,
+        owner?.ownerName1,
+        owner?.ownerName2,
+        owner?.owner1Name,
+        owner?.owner2Name,
+        owner?.primaryOwnerName,
+        owner?.secondaryOwnerName,
+        owner1?.fullName,
+        owner1?.ownerName,
+        buildFullName(owner1?.firstName, owner1?.lastName),
+        owner1?.name,
+        owner2?.fullName,
+        owner2?.ownerName,
+        buildFullName(owner2?.firstName, owner2?.lastName),
+        owner2?.name,
+        ownerFromList || null,
+        property?.ownerName,
+        property?.owner_name,
+        property?.owner1Name,
+        property?.owner2Name,
+    ];
+
+    directCandidates.forEach(addCandidate);
+    collectOwnerCandidates(owner, 0, true);
+    collectOwnerCandidates(property?.ownership, 0, true);
+    collectOwnerCandidates(property?.ownerInfo, 0, true);
+
+    for (const candidate of ownerCandidates) {
+        return candidate;
+    }
+    return null;
 };
 
 const extractProperties = (payload: any) => {
@@ -364,6 +420,52 @@ const summarizePropertyCandidate = (property: Record<string, any>, index: number
         latitude: latitude ? Number(latitude) : null,
         longitude: longitude ? Number(longitude) : null,
     };
+};
+
+const mergePropertyData = (base: Record<string, any>, incoming?: Record<string, any> | null) => {
+    if (!incoming || typeof incoming !== 'object') return base;
+
+    const merged: Record<string, any> = { ...base, ...incoming };
+    const nestedKeys = [
+        'address',
+        'summary',
+        'lot',
+        'assessment',
+        'tax',
+        'owner',
+        'ownership',
+        'ownerInfo',
+        'identifier',
+        'area',
+        'demographics',
+        'location',
+    ];
+
+    nestedKeys.forEach((key) => {
+        const baseVal = base?.[key];
+        const incomingVal = incoming?.[key];
+
+        if (
+            incomingVal &&
+            typeof incomingVal === 'object' &&
+            !Array.isArray(incomingVal)
+        ) {
+            merged[key] = {
+                ...(baseVal && typeof baseVal === 'object' && !Array.isArray(baseVal) ? baseVal : {}),
+                ...incomingVal,
+            };
+            return;
+        }
+
+        if (
+            (incomingVal === null || incomingVal === undefined || incomingVal === '') &&
+            baseVal !== undefined
+        ) {
+            merged[key] = baseVal;
+        }
+    });
+
+    return merged;
 };
 
 const buildPropertySelectionPrompt = (context: PropertySelectionContext, candidates: PropertyCandidate[]) => {
@@ -667,24 +769,7 @@ export async function POST(req: Request) {
                         if (parcelProperty) {
                             payload = parcelFromGeo.payload;
                             response = parcelFromGeo.response;
-                            property = {
-                                ...property,
-                                ...parcelProperty,
-                                address: {
-                                    ...(property?.address || {}),
-                                    ...(parcelProperty?.address || {}),
-                                },
-                                summary: {
-                                    ...(property?.summary || {}),
-                                    ...(parcelProperty?.summary || {}),
-                                },
-                                lot: {
-                                    ...(property?.lot || {}),
-                                    ...(parcelProperty?.lot || {}),
-                                },
-                                assessment: parcelProperty?.assessment || property?.assessment,
-                                tax: parcelProperty?.tax || property?.tax,
-                            };
+                            property = mergePropertyData(property, parcelProperty);
                             source = 'geo_snapshot_parcel_fips';
                         }
                     }
@@ -766,22 +851,7 @@ export async function POST(req: Request) {
                     selectionContext
                 );
                 if (detailProperty) {
-                    property = {
-                        ...property,
-                        ...detailProperty,
-                        address: {
-                            ...(property?.address || {}),
-                            ...(detailProperty?.address || {}),
-                        },
-                        summary: {
-                            ...(property?.summary || {}),
-                            ...(detailProperty?.summary || {}),
-                        },
-                        lot: {
-                            ...(property?.lot || {}),
-                            ...(detailProperty?.lot || {}),
-                        },
-                    };
+                    property = mergePropertyData(property, detailProperty);
                 }
             }
         }
@@ -804,24 +874,7 @@ export async function POST(req: Request) {
                     selectionContext
                 );
                 if (expandedProperty) {
-                    property = {
-                        ...property,
-                        ...expandedProperty,
-                        address: {
-                            ...(property?.address || {}),
-                            ...(expandedProperty?.address || {}),
-                        },
-                        summary: {
-                            ...(property?.summary || {}),
-                            ...(expandedProperty?.summary || {}),
-                        },
-                        lot: {
-                            ...(property?.lot || {}),
-                            ...(expandedProperty?.lot || {}),
-                        },
-                        assessment: expandedProperty?.assessment || property?.assessment,
-                        tax: expandedProperty?.tax || property?.tax,
-                    };
+                    property = mergePropertyData(property, expandedProperty);
                 }
             }
         }
@@ -854,24 +907,7 @@ export async function POST(req: Request) {
                     selectionContext
                 );
                 if (parcelProperty) {
-                    property = {
-                        ...property,
-                        ...parcelProperty,
-                        address: {
-                            ...(property?.address || {}),
-                            ...(parcelProperty?.address || {}),
-                        },
-                        summary: {
-                            ...(property?.summary || {}),
-                            ...(parcelProperty?.summary || {}),
-                        },
-                        lot: {
-                            ...(property?.lot || {}),
-                            ...(parcelProperty?.lot || {}),
-                        },
-                        assessment: parcelProperty?.assessment || property?.assessment,
-                        tax: parcelProperty?.tax || property?.tax,
-                    };
+                    property = mergePropertyData(property, parcelProperty);
                 }
             }
         }
@@ -1322,11 +1358,7 @@ export async function POST(req: Request) {
                     property?.identifier?.parcelId ||
                     null,
                 fips_code: fipsCode,
-                owner:
-                    property?.owner?.name ||
-                    property?.owner?.owner1FullName ||
-                    property?.owner?.ownerName ||
-                    null,
+                owner: extractOwnerName(property),
                 county,
                 city,
                 state,

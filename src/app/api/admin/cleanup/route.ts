@@ -3,13 +3,23 @@ import { getDriveClient } from '@/lib/google';
 
 export async function GET() {
     try {
+        const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
+        if (!folderId) {
+            return NextResponse.json(
+                { error: 'GOOGLE_DRIVE_FOLDER_ID not configured' },
+                { status: 500 }
+            );
+        }
+
         const drive = await getDriveClient();
 
-        // List files created by the app (assuming they start with [APP])
+        // List files only from the configured app folder.
         const res = await drive.files.list({
-            q: "name contains '[APP]' and trashed = false",
+            q: `'${folderId}' in parents and trashed = false`,
             fields: 'files(id, name, size)',
-            pageSize: 100
+            pageSize: 100,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
         });
 
         const files = res.data.files || [];
@@ -19,7 +29,10 @@ export async function GET() {
         for (const file of files) {
             try {
                 if (file.id) {
-                    await drive.files.delete({ fileId: file.id });
+                    await drive.files.delete({
+                        fileId: file.id,
+                        supportsAllDrives: true,
+                    });
                     deleted.push(file.name);
                 }
             } catch (e: any) {

@@ -151,7 +151,6 @@ export const Step3PnL: React.FC<Step3Props> = ({ onDataChange, initialData, proj
             syncStatus === 'syncing' ||
             groupedSyncStatus === 'syncing';
         onBusyChange?.(isBusy);
-        return () => onBusyChange?.(false);
     }, [groupingStatus, syncStatus, groupedSyncStatus, onBusyChange]);
     const initialDataSignatureRef = useRef<string>('');
     const localSignatureRef = useRef<string>('');

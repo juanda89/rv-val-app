@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getDriveClientWithEnvOAuth } from '@/lib/google';
+
+const isGoogleNotFound = (error: any) =>
+    error?.code === 404 || error?.status === 404 || error?.response?.status === 404;
 
 export async function POST(req: Request) {
     try {
@@ -31,36 +35,48 @@ export async function POST(req: Request) {
         }
 
         if (project.spreadsheet_id) {
-            const webhookUrl = 'https://n8n-boominbm-u44048.vm.elestio.app/webhook/delete-file';
-            const webhookResponse = await fetch(webhookUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ fileId: project.spreadsheet_id }),
-            });
-
-            if (!webhookResponse.ok) {
-                const errorText = await webhookResponse.text();
-                return NextResponse.json(
-                    { error: 'Failed to delete Drive file', details: errorText },
-                    { status: 500 }
-                );
-            }
-
-            const webhookData = await webhookResponse.json().catch(() => ({}));
-            const success =
-                webhookData?.success === true ||
-                webhookData?.success === 'true';
-            const deleted =
-                webhookData?.deleted === true ||
-                webhookData?.status === 'deleted';
-
-            if (!success && !deleted) {
-                return NextResponse.json(
-                    { error: 'Failed to delete Drive file', details: webhookData },
-                    { status: 500 }
-                );
+            try {
+                const drive = await getDriveClientWithEnvOAuth(req);
+                await drive.files.delete({
+                    fileId: project.spreadsheet_id,
+                    supportsAllDrives: true,
+                });
+            } catch (driveError: any) {
+                const reason = driveError?.response?.data?.error?.errors?.[0]?.reason ?? driveError?.errors?.[0]?.reason ?? null;
+                const message = driveError?.response?.data?.error?.message ?? driveError?.message ?? null;
+                if (
+                    driveError?.message === 'Google OAuth credentials not configured'
+                ) {
+                    return NextResponse.json(
+                        { error: 'Google OAuth credentials not configured' },
+                        { status: 500 }
+                    );
+                }
+                if (
+                    reason === 'invalidGrant' ||
+                    reason === 'invalid_grant' ||
+                    String(message || '').toLowerCase().includes('invalid_grant')
+                ) {
+                    return NextResponse.json(
+                        { error: 'Google OAuth refresh token invalid or revoked' },
+                        { status: 500 }
+                    );
+                }
+                if (!isGoogleNotFound(driveError)) {
+                    console.error('Drive delete failed', {
+                        operation: 'delete',
+                        spreadsheetId: project.spreadsheet_id,
+                        folderId: process.env.GOOGLE_DRIVE_FOLDER_ID?.trim() || null,
+                        oauthClientId: process.env.GOOGLE_CLIENT_ID?.trim() || null,
+                        driveReason: reason,
+                        driveStatus: driveError?.status ?? driveError?.code ?? driveError?.response?.status ?? null,
+                        errorMessage: message,
+                    });
+                    return NextResponse.json(
+                        { error: 'Failed to delete Drive file', details: driveError?.message || driveError },
+                        { status: 500 }
+                    );
+                }
             }
         }
 

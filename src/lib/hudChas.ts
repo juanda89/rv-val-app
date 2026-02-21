@@ -6,6 +6,7 @@ type HudMetrics = {
     unitsAffordable30: number | null;
     unitsPer100: number | null;
     totalUnits: number | null;
+    twoBrRent: number | null;
 };
 
 let cachedData: Record<string, HudMetrics> | null = null;
@@ -108,6 +109,7 @@ const buildLookup = async () => {
             unitsAffordable30: lookup[fips]?.unitsAffordable30 ?? null,
             unitsPer100: lookup[fips]?.unitsPer100 ?? null,
             totalUnits: lookup[fips]?.totalUnits ?? null,
+            twoBrRent: lookup[fips]?.twoBrRent ?? null,
             ...partial,
         };
     };
@@ -115,6 +117,12 @@ const buildLookup = async () => {
     if (stat.isDirectory()) {
         const table16Path = path.join(configuredPath, 'Table16.csv');
         const table15cPath = path.join(configuredPath, 'Table15C.csv');
+        const optionalRentCsvs = [
+            path.join(configuredPath, 'hud_rents.csv'),
+            path.join(configuredPath, 'fmr.csv'),
+            path.join(configuredPath, 'fmr_by_county.csv'),
+            path.join(configuredPath, '2br_rent.csv'),
+        ];
 
         let table16: { headers: string[]; lines: string[] } | null = null;
         let table15c: { headers: string[]; lines: string[] } | null = null;
@@ -149,6 +157,35 @@ const buildLookup = async () => {
             const totalUnits = totalUnitsIndex !== -1 ? toNumber(row[totalUnitsIndex]) : null;
             mergeMetric(fips, { unitsAffordable30: unitsAffordable, totalUnits });
         }
+
+        for (const rentCsvPath of optionalRentCsvs) {
+            try {
+                const rentTable = await parseTable(rentCsvPath);
+                if (!rentTable) continue;
+                const fipsIndex = resolveIndex(rentTable.headers, ['fips', 'county_fips', 'fips_code', 'geoid']);
+                const twoBrRentIndex = resolveIndex(rentTable.headers, [
+                    'two_br_rent',
+                    '2_br_rent',
+                    'two_bedroom_rent',
+                    'two_bedroom_fmr',
+                    'fmr_2br',
+                    'rent_2br',
+                ]);
+                if (fipsIndex === -1 || twoBrRentIndex === -1) continue;
+
+                for (let i = 1; i < rentTable.lines.length; i += 1) {
+                    const row = parseCsvLine(rentTable.lines[i]);
+                    const rawFips = row[fipsIndex];
+                    if (!rawFips) continue;
+                    const fipsMatch = String(rawFips).match(/(\d{5})$/);
+                    const fips = fipsMatch ? fipsMatch[1] : String(rawFips).trim().padStart(5, '0');
+                    const twoBrRent = toNumber(row[twoBrRentIndex]);
+                    mergeMetric(fips, { twoBrRent });
+                }
+            } catch (_error) {
+                // Optional local HUD rent file; ignore when absent.
+            }
+        }
     } else {
         let raw: string;
         try {
@@ -166,6 +203,14 @@ const buildLookup = async () => {
         const unitsIndex = resolveIndex(headers, ['units_affordable_at_30', 'units_affordable_30', 'units_affordable']);
         const unitsPer100Index = resolveIndex(headers, ['units_per_100', 'units_per_100_eli']);
         const totalUnitsIndex = resolveIndex(headers, ['total_units', 'total_housing_units']);
+        const twoBrRentIndex = resolveIndex(headers, [
+            'two_br_rent',
+            '2_br_rent',
+            'two_bedroom_rent',
+            'two_bedroom_fmr',
+            'fmr_2br',
+            'rent_2br',
+        ]);
 
         if (fipsIndex === -1) return null;
 
@@ -177,6 +222,7 @@ const buildLookup = async () => {
             const eli = toNumber(row[eliIndex]);
             const unitsAffordable = toNumber(row[unitsIndex]);
             const totalUnits = toNumber(row[totalUnitsIndex]);
+            const twoBrRent = toNumber(row[twoBrRentIndex]);
             const unitsPer100 = toNumber(row[unitsPer100Index]) ??
                 (eli && unitsAffordable ? Number(((unitsAffordable / eli) * 100).toFixed(2)) : null);
 
@@ -185,6 +231,7 @@ const buildLookup = async () => {
                 unitsAffordable30: unitsAffordable,
                 unitsPer100,
                 totalUnits,
+                twoBrRent,
             };
         }
     }

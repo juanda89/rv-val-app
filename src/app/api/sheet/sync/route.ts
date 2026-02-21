@@ -3,6 +3,12 @@ import { getSheetsClient } from '@/lib/google';
 import { createClient } from '@supabase/supabase-js';
 import { SHEET_MAPPING } from '@/config/sheetMapping';
 
+const normalizeLabel = (value: string) =>
+    value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+
 export async function POST(req: Request) {
     try {
         const { projectId, inputs } = await req.json();
@@ -51,10 +57,36 @@ export async function POST(req: Request) {
         if (projectAddress) mergedInputs.address = projectAddress;
         if (projectCity) mergedInputs.city = projectCity;
 
+        const unmappedKeys = Object.keys(mergedInputs).filter((key) => {
+            const mappingKey = key as keyof typeof SHEET_MAPPING.inputs;
+            const cell = SHEET_MAPPING.inputs[mappingKey];
+            return !(cell && mappingKey !== 'sheetName');
+        });
+
+        const labelRowByKey: Record<string, number> = {};
+        if (unmappedKeys.length > 0) {
+            const labelResponse = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `'${inputSheetName}'!B2:B500`,
+            });
+            const labelRows = labelResponse.data.values || [];
+            labelRows.forEach((row, index) => {
+                const label = String(row?.[0] ?? '').trim();
+                if (!label) return;
+                labelRowByKey[normalizeLabel(label)] = index + 2;
+            });
+        }
+
         for (const [key, value] of Object.entries(mergedInputs)) {
             // Cast key to check if it exists in mapping
             const mappingKey = key as keyof typeof SHEET_MAPPING.inputs;
-            const cell = SHEET_MAPPING.inputs[mappingKey];
+            let cell = SHEET_MAPPING.inputs[mappingKey] as string | undefined;
+            if (!cell || mappingKey === 'sheetName') {
+                const row = labelRowByKey[normalizeLabel(key)];
+                if (row) {
+                    cell = `C${row}`;
+                }
+            }
 
             if (cell && mappingKey !== 'sheetName') {
                 updates.push({
@@ -83,7 +115,7 @@ export async function POST(req: Request) {
             return `'${outputSheetName}'!${cell}`;
         });
 
-        const labelRange = `'${outputSheetName}'!B2:C300`;
+        const labelRange = `'${outputSheetName}'!B2:C2000`;
         const response = await sheets.spreadsheets.values.batchGet({
             spreadsheetId,
             ranges: [...ranges, labelRange],
@@ -106,7 +138,14 @@ export async function POST(req: Request) {
                 .toLowerCase()
                 .replace(/[^a-z0-9]+/g, '_')
                 .replace(/^_+|_+$/g, '');
-            labelValues[normalized] = row?.[1];
+            const value = row?.[1];
+            const existing = labelValues[normalized];
+            const hasNewValue = value !== undefined && value !== null && value !== '';
+            const hasExistingValue = existing !== undefined && existing !== null && existing !== '';
+
+            if (!hasExistingValue || hasNewValue) {
+                labelValues[normalized] = value;
+            }
         });
         results.__labels = labelValues;
 

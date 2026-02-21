@@ -1,47 +1,33 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getSheetsClient } from '@/lib/google';
-import { SHEET_MAPPING } from '@/config/sheetMapping';
-
-const getRowFromCell = (cell: string) => {
-    const match = cell.match(/\d+$/);
-    return match ? Number(match[0]) : 0;
-};
+import { getDriveClientWithEnvOAuth, getSheetsClient } from '@/lib/google';
 
 const applyDefaultValues = async (spreadsheetId: string) => {
     const sheets = await getSheetsClient();
-    const inputSheetName = SHEET_MAPPING.inputs.sheetName;
-    const inputKeys = Object.keys(SHEET_MAPPING.inputs).filter(k => k !== 'sheetName');
+    const inputSheetName = 'Input Fields';
 
-    const inputRanges = inputKeys.map((key) => {
-        const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
-        return `'${inputSheetName}'!${cell}`;
-    });
-    const defaultRanges = inputKeys.map((key) => {
-        const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
-        const row = getRowFromCell(cell);
-        return `'${inputSheetName}'!D${row}`;
-    });
-
-    const response = await sheets.spreadsheets.values.batchGet({
+    const response = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        ranges: [...inputRanges, ...defaultRanges],
+        range: `'${inputSheetName}'!B2:D500`,
     });
 
-    const valueRanges = response.data.valueRanges || [];
     const updates: { range: string; values: any[][] }[] = [];
+    const rows = response.data.values || [];
 
-    inputKeys.forEach((key, index) => {
-        const cell = SHEET_MAPPING.inputs[key as keyof typeof SHEET_MAPPING.inputs];
-        const currentValue = valueRanges[index]?.values?.[0]?.[0];
-        const defaultValue = valueRanges[inputKeys.length + index]?.values?.[0]?.[0];
-
-        if ((currentValue === undefined || currentValue === null || currentValue === '') &&
+    rows.forEach((row, index) => {
+        const label = String(row?.[0] ?? '').trim();
+        if (!label) return;
+        const currentValue = row?.[1];
+        const defaultValue = row?.[2];
+        if (
+            (currentValue === undefined || currentValue === null || currentValue === '') &&
             defaultValue !== undefined &&
             defaultValue !== null &&
-            defaultValue !== '') {
+            defaultValue !== ''
+        ) {
+            const rowNumber = index + 2;
             updates.push({
-                range: `'${inputSheetName}'!${cell}`,
+                range: `'${inputSheetName}'!C${rowNumber}`,
                 values: [[defaultValue]],
             });
         }
@@ -56,6 +42,88 @@ const applyDefaultValues = async (spreadsheetId: string) => {
             },
         });
     }
+};
+
+const extractDriveDiagnostics = (error: any) => {
+    const status =
+        error?.status ??
+        error?.code ??
+        error?.response?.status ??
+        null;
+    const reason =
+        error?.response?.data?.error?.errors?.[0]?.reason ??
+        error?.errors?.[0]?.reason ??
+        null;
+    const message =
+        error?.response?.data?.error?.message ??
+        error?.message ??
+        null;
+
+    return { status, reason, message };
+};
+
+const isPermissionReason = (reason: string | null) =>
+    reason === 'insufficientFilePermissions' ||
+    reason === 'insufficientPermissions' ||
+    reason === 'forbidden';
+
+const duplicateMasterSheet = async (fileName: string, req: Request) => {
+    const masterSheetId = process.env.MASTER_SHEET_ID?.trim();
+    const driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
+    const oauthClientId = process.env.GOOGLE_CLIENT_ID?.trim() || null;
+
+    if (!masterSheetId) {
+        throw new Error('MASTER_SHEET_ID not configured');
+    }
+
+    const copiedFile = await (async () => {
+        try {
+            const drive = await getDriveClientWithEnvOAuth(req);
+            const response = await drive.files.copy({
+                fileId: masterSheetId,
+                supportsAllDrives: true,
+                fields: 'id,name',
+                requestBody: {
+                    name: fileName,
+                    mimeType: 'application/vnd.google-apps.spreadsheet',
+                    ...(driveFolderId ? { parents: [driveFolderId] } : {}),
+                },
+            });
+            return response.data;
+        } catch (error: any) {
+            const diagnostics = extractDriveDiagnostics(error);
+            console.error('Drive copy failed', {
+                operation: 'copy',
+                masterSheetId,
+                folderId: driveFolderId,
+                oauthClientId,
+                ...diagnostics,
+            });
+            if (error?.message === 'Google OAuth credentials not configured') {
+                throw error;
+            }
+            if (diagnostics.reason === 'invalidGrant' || diagnostics.reason === 'invalid_grant' || String(diagnostics.message || '').toLowerCase().includes('invalid_grant')) {
+                throw new Error('Google OAuth refresh token invalid or revoked');
+            }
+            if (diagnostics.reason === 'storageQuotaExceeded') {
+                throw new Error('OAuth account Drive storage quota exceeded');
+            }
+            if (isPermissionReason(diagnostics.reason)) {
+                throw new Error('OAuth account lacks permission to access/copy master file');
+            }
+            if (diagnostics.reason === 'notFound') {
+                throw new Error('MASTER_SHEET_ID not accessible by OAuth account');
+            }
+            throw new Error('Unable to duplicate master sheet with configured OAuth account');
+        }
+    })();
+
+    const spreadsheetId = copiedFile.id;
+    if (!spreadsheetId) {
+        throw new Error('Unable to duplicate master sheet with configured OAuth account');
+    }
+
+    return spreadsheetId;
 };
 
 export async function POST(req: Request) {
@@ -89,41 +157,9 @@ export async function POST(req: Request) {
             }, { status: 401 });
         }
 
-        // Call n8n webhook to duplicate master file
-        const webhookUrl = 'https://n8n-boominbm-u44048.vm.elestio.app/webhook/duplicate-master-file';
+        // Duplicate master sheet directly with Google Drive API (env OAuth credentials)
         const fileName = `[APP] ${name}`;
-        const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-
-        if (!serviceAccountEmail) {
-            throw new Error('GOOGLE_SERVICE_ACCOUNT_EMAIL not configured');
-        }
-
-        console.log('Calling n8n webhook:', { fileName, email: serviceAccountEmail });
-
-        const webhookResponse = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                fileName: fileName,
-                email: serviceAccountEmail
-            })
-        });
-
-        if (!webhookResponse.ok) {
-            const errorText = await webhookResponse.text();
-            throw new Error(`Webhook failed: ${webhookResponse.status} - ${errorText}`);
-        }
-
-        const webhookData = await webhookResponse.json();
-        console.log('Webhook response:', webhookData);
-
-        const spreadsheetId = webhookData.fileId || webhookData.id || webhookData.spreadsheetId;
-
-        if (!spreadsheetId) {
-            throw new Error('Webhook did not return a file ID');
-        }
+        const spreadsheetId = await duplicateMasterSheet(fileName, req);
 
         try {
             await applyDefaultValues(spreadsheetId);
@@ -152,7 +188,15 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ project: data });
     } catch (error: any) {
-        console.error('Project creation failed:', error);
+        console.error('Project creation failed', {
+            masterSheetId: process.env.MASTER_SHEET_ID?.trim() || null,
+            folderId: process.env.GOOGLE_DRIVE_FOLDER_ID?.trim() || null,
+            oauthClientId: process.env.GOOGLE_CLIENT_ID?.trim() || null,
+            operation: 'copy',
+            errorMessage: error?.message || null,
+            driveStatus: error?.status ?? error?.code ?? error?.response?.status ?? null,
+            driveReason: error?.response?.data?.error?.errors?.[0]?.reason ?? error?.errors?.[0]?.reason ?? null,
+        });
         return NextResponse.json({
             error: error.message || 'Unknown error',
             details: error
