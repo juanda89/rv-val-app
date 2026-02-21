@@ -29,7 +29,7 @@ export const normalizeText = (value: unknown) => {
 export const normalizeApn = (value: unknown) => {
     const raw = normalizeText(value);
     if (!raw) return null;
-    return raw.replace(/\s+/g, '');
+    return raw.replace(/[\s-]+/g, '');
 };
 
 export const normalizeFips = (value: unknown) => {

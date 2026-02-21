@@ -5,6 +5,8 @@ import { autofillWithMelissa } from '@/lib/providers/melissa';
 import { autofillWithAttom } from '@/lib/providers/attom';
 import { autofillWithRentcast } from '@/lib/providers/rentcast';
 import { autofillWithReportAllUsa } from '@/lib/providers/reportallusa';
+import { normalizeApn } from '@/lib/providers/utils';
+import { fetchFred10YearTreasury } from '@/lib/marketRates';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +21,7 @@ const toNumber = (value: unknown) => {
 const parseContext = (body: Record<string, any>): AutofillContext => ({
     intent: body?.intent === 'taxes' ? 'taxes' : 'step1',
     address: typeof body?.address === 'string' ? body.address.trim() : undefined,
-    apn: typeof body?.apn === 'string' ? body.apn.trim() : undefined,
+    apn: normalizeApn(body?.apn) ?? undefined,
     lat: toNumber(body?.lat),
     lng: toNumber(body?.lng),
     fips_code: typeof body?.fips_code === 'string' ? body.fips_code.trim() : typeof body?.fips === 'string' ? body.fips.trim() : undefined,
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
 
         const requestOrigin = new URL(req.url).origin;
 
-        const result =
+        let result =
             provider === 'melissa'
                 ? await autofillWithMelissa(context)
                 : provider === 'attom'
@@ -72,6 +74,37 @@ export async function POST(req: Request) {
                     : provider === 'rentcast'
                         ? await autofillWithRentcast(context)
                         : await autofillWithReportAllUsa(context);
+
+        if (context.intent === 'taxes') {
+            try {
+                const treasury10Year = await fetchFred10YearTreasury();
+                if (treasury10Year) {
+                    result = {
+                        ...result,
+                        financials: {
+                            ...result.financials,
+                            us_10_year_treasury: treasury10Year.rate,
+                            us_10_year_treasury_date: treasury10Year.date,
+                        },
+                        api_snapshot: {
+                            ...(result.api_snapshot || {}),
+                            us_10_year_treasury: treasury10Year.rate,
+                        },
+                    };
+                } else {
+                    result = {
+                        ...result,
+                        message: `${result.message} 10Y Treasury from FRED was unavailable.`,
+                    };
+                }
+            } catch (fredError) {
+                console.warn('FRED 10Y fetch failed:', fredError);
+                result = {
+                    ...result,
+                    message: `${result.message} 10Y Treasury from FRED could not be retrieved.`,
+                };
+            }
+        }
 
         return NextResponse.json(result, {
             status: result.apn_found ? 200 : 200,

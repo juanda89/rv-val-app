@@ -13,6 +13,10 @@ const APN_KEY_PATTERNS = [
     'formattedapn',
 ];
 
+const OWNER_BLOCKLIST = /(mail|address|city|state|zip|postal|phone|email|id|type|careof|care_of|company)/i;
+const OWNER_KEY_PATTERNS = /(ownername|owner_name|owner\d+name|primaryowner|primary_owner|secondaryowner|secondary_owner|owner1|owner2)/i;
+const NAME_KEY_PATTERN = /(name|full.?name|display.?name|first.?name|last.?name)/i;
+
 const findFirstApn = (payload: any): string | null => {
     if (!payload) return null;
     const stack: any[] = [payload];
@@ -36,6 +40,45 @@ const findFirstApn = (payload: any): string | null => {
             }
             if (value && typeof value === 'object') {
                 stack.push(value);
+            }
+        }
+    }
+
+    return null;
+};
+
+const findFirstOwnerName = (payload: any): string | null => {
+    if (!payload) return null;
+    const stack: Array<{ node: any; ownerContext: boolean }> = [{ node: payload, ownerContext: false }];
+
+    while (stack.length > 0) {
+        const { node, ownerContext } = stack.pop()!;
+        if (!node) continue;
+
+        if (Array.isArray(node)) {
+            node.forEach((entry) => stack.push({ node: entry, ownerContext }));
+            continue;
+        }
+
+        if (typeof node !== 'object') continue;
+
+        for (const [rawKey, rawValue] of Object.entries(node)) {
+            const key = String(rawKey).toLowerCase();
+            const inOwnerContext = ownerContext || key.includes('owner');
+
+            if (typeof rawValue === 'string') {
+                const normalized = normalizeText(rawValue);
+                if (!normalized) continue;
+                const isOwnerKey = OWNER_KEY_PATTERNS.test(key);
+                const isNameKey = NAME_KEY_PATTERN.test(key);
+                if ((isOwnerKey || (inOwnerContext && isNameKey) || (inOwnerContext && !OWNER_BLOCKLIST.test(key))) && !OWNER_BLOCKLIST.test(key)) {
+                    return normalized;
+                }
+                continue;
+            }
+
+            if (rawValue && typeof rawValue === 'object') {
+                stack.push({ node: rawValue, ownerContext: inOwnerContext });
             }
         }
     }
@@ -104,7 +147,9 @@ export const autofillWithReportAllUsa = async (context: AutofillContext): Promis
         return buildEmptyResponse('reportallusa', 'No APN/Assessor ID found via address or coordinates for reportallusa.');
     }
 
+    const ownerName = findFirstOwnerName(payload);
     const snapshot = applyCommonApiSnapshot({
+        ownerName,
         apn,
         fips: context.fips_code,
     });
@@ -119,7 +164,7 @@ export const autofillWithReportAllUsa = async (context: AutofillContext): Promis
             apn,
             assessor_id: apn,
             fips_code: normalizeText(context.fips_code),
-            owner: null,
+            owner: ownerName,
             county: normalizeText(context.county),
             city: normalizeText(context.city),
             state: normalizeText(context.state),

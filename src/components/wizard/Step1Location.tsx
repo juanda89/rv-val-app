@@ -181,9 +181,13 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
         defaultValues[key] !== null &&
         defaultValues[key] !== '' &&
         normalizeComparable(currentValue) === normalizeComparable(defaultValues[key]);
+    const normalizeParcelIdentifier = (value: unknown) => {
+        const raw = String(value ?? '').trim();
+        if (!raw) return '';
+        return raw.replace(/[\s-]+/g, '');
+    };
     const isEmptyOrDefault = (key: string, currentValue: any) =>
         isEmptyValue(currentValue) || isDefaultValue(key, currentValue);
-
     React.useEffect(() => {
         if (typeof initialData?.mobile_home_park_name === 'string') {
             setProjectName(initialData.mobile_home_park_name);
@@ -459,9 +463,10 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
 
         const updates: Record<string, any> = {};
         const attomSnapshot: Record<string, any> = {};
+        const normalizedApn = normalizeParcelIdentifier(identity.apn);
         if (identity.owner) attomSnapshot.owner_name = identity.owner;
-        if (identity.apn) attomSnapshot.parcelNumber = identity.apn;
-        if (identity.apn) attomSnapshot.parcel_1 = identity.apn;
+        if (normalizedApn) attomSnapshot.parcelNumber = normalizedApn;
+        if (normalizedApn) attomSnapshot.parcel_1 = normalizedApn;
         if (identity.fips_code) attomSnapshot.fips_code = identity.fips_code;
         if (identity.acreage) attomSnapshot.acreage = identity.acreage;
         if (identity.acreage) attomSnapshot.parcel_1_acreage = identity.acreage;
@@ -472,11 +477,11 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
         if (identity.owner && shouldFillWithAttom(initialData?.owner_name, 'owner_name')) {
             updates.owner_name = identity.owner;
         }
-        if (identity.apn && shouldFillWithAttom(initialData?.parcelNumber, 'parcelNumber')) {
-            updates.parcelNumber = identity.apn;
+        if (normalizedApn && shouldFillWithAttom(initialData?.parcelNumber, 'parcelNumber')) {
+            updates.parcelNumber = normalizedApn;
         }
-        if (identity.apn && shouldFillWithAttom(initialData?.parcel_1, 'parcel_1')) {
-            updates.parcel_1 = identity.apn;
+        if (normalizedApn && shouldFillWithAttom(initialData?.parcel_1, 'parcel_1')) {
+            updates.parcel_1 = normalizedApn;
         }
         if (identity.fips_code && isEmptyOrDefault('fips_code', initialData?.fips_code)) {
             updates.fips_code = identity.fips_code;
@@ -584,7 +589,9 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
             setAttomError('Select an API source first.');
             return;
         }
-        const existingApn = initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber;
+        const existingApn = normalizeParcelIdentifier(
+            initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber
+        );
         if (!addressToUse && !coords && !existingApn) return;
         setAttomLoading(true);
         setAttomError(null);
@@ -748,7 +755,9 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
     };
 
     const handleAutoFillClick = async () => {
-        const existingApn = initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber;
+        const existingApn = normalizeParcelIdentifier(
+            initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber
+        );
         if (!value && !existingApn) return;
         try {
             const coords = value ? await geocodeAddress(value) : undefined;
@@ -945,7 +954,10 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
                     />
                     <Input
                         value={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
-                        onChange={(e) => onDataChange({ parcel_1: e.target.value, parcelNumber: e.target.value })}
+                        onChange={(e) => {
+                            const normalized = e.target.value.replace(/[\s-]+/g, '').trim();
+                            onDataChange({ parcel_1: normalized, parcelNumber: normalized });
+                        }}
                         placeholder="Auto-fetched"
                         className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
                     />
@@ -1331,6 +1343,11 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
         defaultValues[key] !== null &&
         defaultValues[key] !== '' &&
         normalizeComparable(currentValue) === normalizeComparable(defaultValues[key]);
+    const normalizeParcelIdentifier = (value: unknown) => {
+        const raw = String(value ?? '').trim();
+        if (!raw) return '';
+        return raw.replace(/[\s-]+/g, '');
+    };
     const isEmptyOrDefault = (key: string, currentValue: any) =>
         isEmptyValue(currentValue) || isDefaultValue(key, currentValue);
     const shouldFillWithAttom = (currentValue: any, key: string) => {
@@ -1360,7 +1377,9 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
     }, [attomLoading, onBusyChange]);
 
     const fetchAttomData = async () => {
-        const existingApn = initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber;
+        const existingApn = normalizeParcelIdentifier(
+            initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber
+        );
         if (!manualAddress && !initialData?.lat && !existingApn) return;
         if (!selectedApi) {
             setAttomError('Select an API source first.');
@@ -1414,6 +1433,7 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
             const housing = payload?.housing_crisis_metrics || {};
             const demographicsDetails = payload?.demographics_details || null;
             const incomingSnapshot = sanitizeApiSnapshot(payload?.api_snapshot || {});
+            const normalizedApn = normalizeParcelIdentifier(identity.apn);
 
             const updates: Record<string, any> = {
                 mobile_home_park_name: manualName || initialData?.mobile_home_park_name,
@@ -1434,8 +1454,8 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
 
             assignIfAllowed('owner_name', identity.owner);
             assignIfAllowed('fips_code', identity.fips_code);
-            assignIfAllowed('parcelNumber', identity.apn);
-            assignIfAllowed('parcel_1', identity.apn);
+            assignIfAllowed('parcelNumber', normalizedApn);
+            assignIfAllowed('parcel_1', normalizedApn);
             assignIfAllowed('acreage', identity.acreage);
             assignIfAllowed('parcel_1_acreage', identity.acreage);
             assignIfAllowed('year_built', identity.year_built);
@@ -1670,7 +1690,10 @@ export const Step1Location: React.FC<Step1Props> = ({ onDataChange, initialData,
                         />
                         <Input
                             value={(initialData?.parcel_1 ?? '') || (initialData?.parcelNumber ?? '')}
-                            onChange={(e) => onDataChange({ parcel_1: e.target.value, parcelNumber: e.target.value })}
+                            onChange={(e) => {
+                                const normalized = e.target.value.replace(/[\s-]+/g, '').trim();
+                                onDataChange({ parcel_1: normalized, parcelNumber: normalized });
+                            }}
                             placeholder="Auto-fetched"
                             className="w-full bg-white dark:bg-[#283339] border border-slate-300 dark:border-transparent text-slate-900 dark:text-white"
                         />

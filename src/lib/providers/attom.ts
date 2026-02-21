@@ -1,5 +1,5 @@
 import type { AutofillContext, NormalizedAutofillResponse } from '@/lib/providers/types';
-import { applyCommonApiSnapshot, buildEmptyResponse, normalizeText } from '@/lib/providers/utils';
+import { applyCommonApiSnapshot, buildEmptyResponse, normalizeApn, normalizeText } from '@/lib/providers/utils';
 
 const toApiSnapshot = (payload: any) => {
     const identity = payload?.property_identity || {};
@@ -65,7 +65,7 @@ const callAttomRoute = async (origin: string, body: Record<string, any>) => {
 
 const toNormalized = (payload: any, lookupSource: 'apn' | 'address' | 'lat_lng'): NormalizedAutofillResponse => {
     const identity = payload?.property_identity || {};
-    const apn = normalizeText(identity?.apn);
+    const apn = normalizeApn(identity?.apn);
     const snapshot = toApiSnapshot(payload);
 
     return {

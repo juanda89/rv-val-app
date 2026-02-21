@@ -25,6 +25,11 @@ const formatThousands = (value: string | number) => {
 };
 
 const normalizeCurrencyInput = (value: string) => value.replace(/[^\d.]/g, '');
+const normalizeParcelIdentifier = (value: unknown) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    return raw.replace(/[\s-]+/g, '');
+};
 
 export const Step4Taxes: React.FC<Step4Props> = ({
     onDataChange,
@@ -160,7 +165,9 @@ export const Step4Taxes: React.FC<Step4Props> = ({
             setError('Select an API source first.');
             return;
         }
-        const existingApn = initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber;
+        const existingApn = normalizeParcelIdentifier(
+            initialData?.parcel_1 || initialData?.parcelNumber || pdfValues?.parcel_1 || pdfValues?.parcelNumber
+        );
         if (!existingApn) {
             setError('APN is required for taxes auto-fill. Add APN manually or run Step 1 AI Auto-Fill first.');
             return;
