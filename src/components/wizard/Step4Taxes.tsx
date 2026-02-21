@@ -172,7 +172,6 @@ export const Step4Taxes: React.FC<Step4Props> = ({
             setError('APN is required for taxes auto-fill. Add APN manually or run Step 1 AI Auto-Fill first.');
             return;
         }
-        if (!resolvedAddress && !hasCoordinates) return;
         setLoading(true);
         setError(null);
         setMessage(null);
@@ -198,10 +197,6 @@ export const Step4Taxes: React.FC<Step4Props> = ({
 
             if (!res.ok) {
                 throw new Error(json?.error || 'Auto-fill request failed');
-            }
-
-            if (!json?.apn_found) {
-                throw new Error(json?.message || `No APN/Assessor ID found via address or coordinates for ${selectedApi}.`);
             }
 
             const apiSnapshot = sanitizeApiSnapshot(json?.api_snapshot || {});

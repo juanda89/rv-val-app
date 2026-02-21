@@ -324,6 +324,52 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
         }
     }, []);
 
+    const attachDataUsaDemographics = React.useCallback(async (
+        fipsCode: string,
+        targetPayload: Record<string, any>,
+        targetApiValues: Record<string, any>
+    ) => {
+        const demographics = await resolveDemographicsFromDataUsa(fipsCode);
+        if (!demographics) return;
+
+        const assignIfAllowed = (fieldKey: string, nextValue: any) => {
+            if (!shouldApplyApiValue({
+                fieldKey,
+                nextValue,
+                currentValue: initialData?.[fieldKey],
+                defaultValues,
+                previousApiValues: apiValues,
+            })) {
+                return;
+            }
+            targetPayload[fieldKey] = nextValue;
+            targetApiValues[fieldKey] = nextValue;
+        };
+
+        assignIfAllowed('population', demographics.population);
+        assignIfAllowed('population_change', demographics.population_change);
+        assignIfAllowed('median_household_income', demographics.median_household_income);
+        assignIfAllowed('median_household_income_change', demographics.median_household_income_change);
+        assignIfAllowed('median_property_value', demographics.median_property_value);
+        assignIfAllowed('median_property_value_change', demographics.median_property_value_change);
+        assignIfAllowed('poverty_rate', demographics.poverty_rate);
+        assignIfAllowed('number_of_employees', demographics.number_of_employees);
+        assignIfAllowed('number_of_employees_change', demographics.number_of_employees_change);
+        if (demographics.number_of_businesses !== undefined) {
+            targetApiValues.number_of_businesses = demographics.number_of_businesses;
+        }
+        assignIfAllowed('two_br_rent', demographics.two_br_rent);
+        assignIfAllowed('eli_renter_households', demographics.eli_renter_households);
+        assignIfAllowed('units_per_100', demographics.units_per_100);
+        assignIfAllowed('total_units', demographics.total_units);
+        if (Object.prototype.hasOwnProperty.call(demographics, 'violent_crime')) {
+            assignIfAllowed('violent_crime', demographics.violent_crime ?? null);
+        }
+        if (Object.prototype.hasOwnProperty.call(demographics, 'property_crime')) {
+            assignIfAllowed('property_crime', demographics.property_crime ?? null);
+        }
+    }, [apiValues, defaultValues, initialData, resolveDemographicsFromDataUsa]);
+
     React.useEffect(() => {
         const address = initialData?.address;
         if (!address || !ready) return;
@@ -360,73 +406,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
                 if (!isActive || requestSeq !== geocodeRequestSeqRef.current) return;
                 if (fipsCode) {
                     updates.fips_code = fipsCode;
-                    const demographics = await resolveDemographicsFromDataUsa(fipsCode);
-                    if (!isActive || requestSeq !== geocodeRequestSeqRef.current) return;
-                    const apiValuesUpdate: Record<string, any> = { ...(initialData?.api_values || {}), fips_code: fipsCode };
-                    if (demographics?.population !== undefined) {
-                        updates.population = demographics.population;
-                        apiValuesUpdate.population = demographics.population;
-                    }
-                    if (demographics?.population_change !== undefined) {
-                        updates.population_change = demographics.population_change;
-                        apiValuesUpdate.population_change = demographics.population_change;
-                    }
-                    if (demographics?.median_household_income !== undefined) {
-                        updates.median_household_income = demographics.median_household_income;
-                        apiValuesUpdate.median_household_income = demographics.median_household_income;
-                    }
-                    if (demographics?.median_household_income_change !== undefined) {
-                        updates.median_household_income_change = demographics.median_household_income_change;
-                        apiValuesUpdate.median_household_income_change = demographics.median_household_income_change;
-                    }
-                    if (demographics?.median_property_value !== undefined) {
-                        updates.median_property_value = demographics.median_property_value;
-                        apiValuesUpdate.median_property_value = demographics.median_property_value;
-                    }
-                    if (demographics?.median_property_value_change !== undefined) {
-                        updates.median_property_value_change = demographics.median_property_value_change;
-                        apiValuesUpdate.median_property_value_change = demographics.median_property_value_change;
-                    }
-                    if (demographics?.poverty_rate !== undefined) {
-                        updates.poverty_rate = demographics.poverty_rate;
-                        apiValuesUpdate.poverty_rate = demographics.poverty_rate;
-                    }
-                    if (demographics?.number_of_employees !== undefined) {
-                        updates.number_of_employees = demographics.number_of_employees;
-                        apiValuesUpdate.number_of_employees = demographics.number_of_employees;
-                    }
-                    if (demographics?.number_of_employees_change !== undefined) {
-                        updates.number_of_employees_change = demographics.number_of_employees_change;
-                        apiValuesUpdate.number_of_employees_change = demographics.number_of_employees_change;
-                    }
-                    if (demographics?.number_of_businesses !== undefined) {
-                        apiValuesUpdate.number_of_businesses = demographics.number_of_businesses;
-                    }
-                    if (demographics?.two_br_rent !== undefined) {
-                        updates.two_br_rent = demographics.two_br_rent;
-                        apiValuesUpdate.two_br_rent = demographics.two_br_rent;
-                    }
-                    if (demographics?.eli_renter_households !== undefined) {
-                        updates.eli_renter_households = demographics.eli_renter_households;
-                        apiValuesUpdate.eli_renter_households = demographics.eli_renter_households;
-                    }
-                    if (demographics?.units_per_100 !== undefined) {
-                        updates.units_per_100 = demographics.units_per_100;
-                        apiValuesUpdate.units_per_100 = demographics.units_per_100;
-                    }
-                    if (demographics?.total_units !== undefined) {
-                        updates.total_units = demographics.total_units;
-                        apiValuesUpdate.total_units = demographics.total_units;
-                    }
-                    if (demographics && Object.prototype.hasOwnProperty.call(demographics, 'violent_crime')) {
-                        updates.violent_crime = demographics.violent_crime ?? null;
-                        apiValuesUpdate.violent_crime = demographics.violent_crime ?? null;
-                    }
-                    if (demographics && Object.prototype.hasOwnProperty.call(demographics, 'property_crime')) {
-                        updates.property_crime = demographics.property_crime ?? null;
-                        apiValuesUpdate.property_crime = demographics.property_crime ?? null;
-                    }
-                    updates.api_values = apiValuesUpdate;
+                    updates.api_values = { ...(initialData?.api_values || {}), fips_code: fipsCode };
                 }
                 if (address) updates.mobile_home_park_address = address;
 
@@ -441,7 +421,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
         return () => {
             isActive = false;
         };
-    }, [initialData?.address, initialData?.lat, initialData?.lng, initialData?.city, initialData?.county, initialData?.api_values, onDataChange, ready, resolveFipsFromCensusByCoords, resolveDemographicsFromDataUsa]);
+    }, [initialData?.address, initialData?.lat, initialData?.lng, initialData?.city, initialData?.county, initialData?.api_values, onDataChange, ready, resolveFipsFromCensusByCoords]);
 
     const shouldFillWithAttom = (currentValue: any, key: string) => {
         if (isEmptyOrDefault(key, currentValue)) return true;
@@ -564,7 +544,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
     const applyPdfFallback = () => {
         if (!pdfValues) return;
         const updates: Record<string, any> = {};
-        const pdfParcel = pdfValues.parcel_1 || pdfValues.parcelNumber;
+        const pdfParcel = normalizeParcelIdentifier(pdfValues.parcel_1 || pdfValues.parcelNumber);
         if (isEmptyOrDefault('parcel_1', initialData?.parcel_1) && pdfParcel) updates.parcel_1 = pdfParcel;
         if (isEmptyOrDefault('parcelNumber', initialData?.parcelNumber) && pdfParcel) updates.parcelNumber = pdfParcel;
         if (isEmptyOrDefault('parcel_1_acreage', initialData?.parcel_1_acreage) && pdfValues.parcel_1_acreage) {
@@ -583,6 +563,27 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
             onDataChange(updates);
         }
     };
+
+    React.useEffect(() => {
+        applyPdfFallback();
+    }, [
+        initialData?.parcel_1,
+        initialData?.parcelNumber,
+        initialData?.parcel_1_acreage,
+        initialData?.acreage,
+        initialData?.property_type,
+        initialData?.year_built,
+        initialData?.last_sale_price,
+        initialData?.owner_name,
+        pdfValues?.parcel_1,
+        pdfValues?.parcelNumber,
+        pdfValues?.parcel_1_acreage,
+        pdfValues?.acreage,
+        pdfValues?.property_type,
+        pdfValues?.year_built,
+        pdfValues?.last_sale_price,
+        pdfValues?.owner_name,
+    ]);
 
     const fetchAttomData = async (addressToUse: string, coords?: { lat: number; lng: number }) => {
         if (!selectedApi) {
@@ -634,7 +635,8 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
         }
     };
 
-    const geocodeAddress = async (addressToUse: string) => {
+    const geocodeAddress = async (addressToUse: string, options?: { includeDataUsa?: boolean }) => {
+        const includeDataUsa = Boolean(options?.includeDataUsa);
         const requestSeq = ++geocodeRequestSeqRef.current;
         const results = await getGeocode({ address: addressToUse });
         if (!results?.[0] || requestSeq !== geocodeRequestSeqRef.current) return null;
@@ -663,70 +665,9 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
         if (fipsCode) {
             payload.fips_code = fipsCode;
             const apiValuesUpdate: Record<string, any> = { ...(initialData?.api_values || {}), fips_code: fipsCode };
-            const demographics = await resolveDemographicsFromDataUsa(fipsCode);
-            if (requestSeq !== geocodeRequestSeqRef.current) return null;
-            if (demographics?.population !== undefined) {
-                payload.population = demographics.population;
-                apiValuesUpdate.population = demographics.population;
-            }
-            if (demographics?.population_change !== undefined) {
-                payload.population_change = demographics.population_change;
-                apiValuesUpdate.population_change = demographics.population_change;
-            }
-            if (demographics?.median_household_income !== undefined) {
-                payload.median_household_income = demographics.median_household_income;
-                apiValuesUpdate.median_household_income = demographics.median_household_income;
-            }
-            if (demographics?.median_household_income_change !== undefined) {
-                payload.median_household_income_change = demographics.median_household_income_change;
-                apiValuesUpdate.median_household_income_change = demographics.median_household_income_change;
-            }
-            if (demographics?.median_property_value !== undefined) {
-                payload.median_property_value = demographics.median_property_value;
-                apiValuesUpdate.median_property_value = demographics.median_property_value;
-            }
-            if (demographics?.median_property_value_change !== undefined) {
-                payload.median_property_value_change = demographics.median_property_value_change;
-                apiValuesUpdate.median_property_value_change = demographics.median_property_value_change;
-            }
-            if (demographics?.poverty_rate !== undefined) {
-                payload.poverty_rate = demographics.poverty_rate;
-                apiValuesUpdate.poverty_rate = demographics.poverty_rate;
-            }
-            if (demographics?.number_of_employees !== undefined) {
-                payload.number_of_employees = demographics.number_of_employees;
-                apiValuesUpdate.number_of_employees = demographics.number_of_employees;
-            }
-            if (demographics?.number_of_employees_change !== undefined) {
-                payload.number_of_employees_change = demographics.number_of_employees_change;
-                apiValuesUpdate.number_of_employees_change = demographics.number_of_employees_change;
-            }
-            if (demographics?.number_of_businesses !== undefined) {
-                apiValuesUpdate.number_of_businesses = demographics.number_of_businesses;
-            }
-            if (demographics?.two_br_rent !== undefined) {
-                payload.two_br_rent = demographics.two_br_rent;
-                apiValuesUpdate.two_br_rent = demographics.two_br_rent;
-            }
-            if (demographics?.eli_renter_households !== undefined) {
-                payload.eli_renter_households = demographics.eli_renter_households;
-                apiValuesUpdate.eli_renter_households = demographics.eli_renter_households;
-            }
-            if (demographics?.units_per_100 !== undefined) {
-                payload.units_per_100 = demographics.units_per_100;
-                apiValuesUpdate.units_per_100 = demographics.units_per_100;
-            }
-            if (demographics?.total_units !== undefined) {
-                payload.total_units = demographics.total_units;
-                apiValuesUpdate.total_units = demographics.total_units;
-            }
-            if (demographics && Object.prototype.hasOwnProperty.call(demographics, 'violent_crime')) {
-                payload.violent_crime = demographics.violent_crime ?? null;
-                apiValuesUpdate.violent_crime = demographics.violent_crime ?? null;
-            }
-            if (demographics && Object.prototype.hasOwnProperty.call(demographics, 'property_crime')) {
-                payload.property_crime = demographics.property_crime ?? null;
-                apiValuesUpdate.property_crime = demographics.property_crime ?? null;
+            if (includeDataUsa) {
+                await attachDataUsaDemographics(fipsCode, payload, apiValuesUpdate);
+                if (requestSeq !== geocodeRequestSeqRef.current) return null;
             }
             payload.api_values = apiValuesUpdate;
         }
@@ -760,7 +701,7 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
         );
         if (!value && !existingApn) return;
         try {
-            const coords = value ? await geocodeAddress(value) : undefined;
+            const coords = value ? await geocodeAddress(value, { includeDataUsa: true }) : undefined;
             await fetchAttomData(value, coords || undefined);
         } catch (error) {
             console.error("Error: ", error);

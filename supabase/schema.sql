@@ -23,3 +23,29 @@ create policy "Users can insert their own projects"
 create policy "Users can delete their own projects"
   on projects for delete
   using (auth.uid() = user_id);
+
+-- Global application settings
+create table if not exists app_settings (
+  key text primary key,
+  value text not null,
+  updated_by uuid references auth.users on delete set null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table app_settings enable row level security;
+
+create policy "Authenticated users can read app settings"
+  on app_settings for select
+  to authenticated
+  using (auth.role() = 'authenticated');
+
+create policy "Authenticated users can insert app settings"
+  on app_settings for insert
+  to authenticated
+  with check (auth.role() = 'authenticated');
+
+create policy "Authenticated users can update app settings"
+  on app_settings for update
+  to authenticated
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');

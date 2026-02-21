@@ -1,5 +1,13 @@
 import type { AutofillContext, NormalizedAutofillResponse } from '@/lib/providers/types';
-import { applyCommonApiSnapshot, buildEmptyResponse, normalizeApn, normalizeText } from '@/lib/providers/utils';
+import {
+    applyCommonApiSnapshot,
+    buildEmptyResponse,
+    calculateMillage,
+    normalizeApn,
+    normalizeText,
+    toInteger,
+    toNumber,
+} from '@/lib/providers/utils';
 
 const REPORTALLUSA_ENDPOINT = 'https://reportallusa.com/api/parcels';
 
@@ -101,6 +109,52 @@ const fetchReportAllUsa = async (params: URLSearchParams) => {
     return payload;
 };
 
+type PayloadNode = { node: any; path: string[] };
+
+const normalizeLookupKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const extractNumericByPatterns = (payload: any, patterns: string[], requireTaxContext = false) => {
+    if (!payload) return null;
+    const normalizedPatterns = patterns.map(normalizeLookupKey);
+    const stack: PayloadNode[] = [{ node: payload, path: [] }];
+
+    while (stack.length > 0) {
+        const { node, path } = stack.pop()!;
+        if (!node) continue;
+
+        if (Array.isArray(node)) {
+            node.forEach((entry, index) => stack.push({ node: entry, path: [...path, String(index)] }));
+            continue;
+        }
+
+        if (typeof node !== 'object') continue;
+
+        for (const [rawKey, rawValue] of Object.entries(node)) {
+            const key = normalizeLookupKey(rawKey);
+            const context = [...path, key].join('.');
+            const hasTaxContext = context.includes('tax');
+            const matches = normalizedPatterns.some((pattern) => key.includes(pattern));
+            if (matches && (!requireTaxContext || hasTaxContext)) {
+                const parsed = toNumber(rawValue);
+                if (parsed !== null) return parsed;
+            }
+            if (rawValue && typeof rawValue === 'object') {
+                stack.push({ node: rawValue, path: [...path, key] });
+            }
+        }
+    }
+
+    return null;
+};
+
+const extractTaxYear = (payload: any) => {
+    const explicit = extractNumericByPatterns(payload, ['tax_year', 'taxyear'], false);
+    if (explicit !== null) return toInteger(explicit);
+    const contextual = extractNumericByPatterns(payload, ['year'], true);
+    if (contextual !== null) return toInteger(contextual);
+    return null;
+};
+
 export const autofillWithReportAllUsa = async (context: AutofillContext): Promise<NormalizedAutofillResponse> => {
     const client = process.env.REPORTALLUSA_CLIENT;
     if (!client) {
@@ -120,7 +174,9 @@ export const autofillWithReportAllUsa = async (context: AutofillContext): Promis
         lookupSource = 'apn';
     }
 
-    if (context.address && context.fips_code) {
+    let apn = findFirstApn(payload);
+
+    if (!apn && context.address && context.fips_code) {
         const params = new URLSearchParams();
         params.set('client', client);
         params.set('v', '2');
@@ -128,9 +184,8 @@ export const autofillWithReportAllUsa = async (context: AutofillContext): Promis
         params.set('address', context.address);
         payload = await fetchReportAllUsa(params);
         lookupSource = 'address';
+        apn = findFirstApn(payload);
     }
-
-    let apn = findFirstApn(payload);
 
     if (!apn && Number.isFinite(context.lat) && Number.isFinite(context.lng)) {
         const params = new URLSearchParams();
@@ -148,10 +203,26 @@ export const autofillWithReportAllUsa = async (context: AutofillContext): Promis
     }
 
     const ownerName = findFirstOwnerName(payload);
+    const assessedValue = extractNumericByPatterns(payload, ['assessed', 'assessedvalue', 'assessed_value', 'assessmentvalue', 'assessment_value']);
+    const marketValue = extractNumericByPatterns(payload, ['marketvalue', 'market_value', 'fairmarketvalue', 'fair_market_value', 'fmv']);
+    const taxAmount = extractNumericByPatterns(payload, ['taxamount', 'tax_amount', 'taxtotal', 'tax_total', 'totaltax', 'taxes', 'taxdue', 'tax_due'], true);
+    const taxYear = extractTaxYear(payload);
+    const millageRate = calculateMillage(taxAmount, assessedValue);
+    const hasTaxFinancials =
+        assessedValue !== null ||
+        marketValue !== null ||
+        taxAmount !== null ||
+        taxYear !== null;
+
     const snapshot = applyCommonApiSnapshot({
         ownerName,
         apn,
         fips: context.fips_code,
+        assessedValue,
+        taxYear,
+        taxAmount,
+        marketValue,
+        millageRate,
     });
 
     return {
@@ -176,12 +247,12 @@ export const autofillWithReportAllUsa = async (context: AutofillContext): Promis
         },
         financials: {
             source: 'ReportAllUSA',
-            market_value: null,
-            assessed_value: null,
-            tax_amount: null,
-            tax_prev_year_amount: null,
-            tax_year: null,
-            millage_rate: null,
+            market_value: marketValue,
+            assessed_value: assessedValue,
+            tax_amount: taxAmount,
+            tax_prev_year_amount: taxAmount,
+            tax_year: taxYear,
+            millage_rate: millageRate,
             assessment_ratio: null,
             last_sale_date: null,
             last_sale_price: null,
@@ -213,8 +284,10 @@ export const autofillWithReportAllUsa = async (context: AutofillContext): Promis
         demographics_details: null,
         api_snapshot: snapshot,
         source_provider: 'reportallusa',
-        message: `ReportAllUSA: APN found via ${
-            lookupSource === 'lat_lng' ? 'coordinates' : lookupSource === 'apn' ? 'APN lookup' : 'address'
-        } (APN-only mode).`,
+        message: hasTaxFinancials
+            ? `ReportAllUSA: APN found via ${
+                lookupSource === 'lat_lng' ? 'coordinates' : lookupSource === 'apn' ? 'APN lookup' : 'address'
+            } and taxes extracted.`
+            : 'ReportAllUSA: APN found, but tax financial fields are not present in provider response.',
     };
 };

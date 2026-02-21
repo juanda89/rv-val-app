@@ -6,11 +6,17 @@ import { autofillWithAttom } from '@/lib/providers/attom';
 import { autofillWithRentcast } from '@/lib/providers/rentcast';
 import { autofillWithReportAllUsa } from '@/lib/providers/reportallusa';
 import { normalizeApn } from '@/lib/providers/utils';
-import { fetchFred10YearTreasury } from '@/lib/marketRates';
+import { fetchFred10YearTreasury, FredTreasuryError } from '@/lib/marketRates';
 
 export const runtime = 'nodejs';
 
 const PROVIDERS: ApiProvider[] = ['melissa', 'attom', 'rentcast', 'reportallusa'];
+const PROVIDER_LABELS: Record<ApiProvider, string> = {
+    melissa: 'Melissa',
+    attom: 'ATTOM',
+    rentcast: 'Rentcast',
+    reportallusa: 'ReportAllUSA',
+};
 
 const toNumber = (value: unknown) => {
     if (value === null || value === undefined || value === '') return undefined;
@@ -75,35 +81,60 @@ export async function POST(req: Request) {
                         ? await autofillWithRentcast(context)
                         : await autofillWithReportAllUsa(context);
 
+        let fredStatusMessage = '';
         if (context.intent === 'taxes') {
             try {
                 const treasury10Year = await fetchFred10YearTreasury();
-                if (treasury10Year) {
-                    result = {
-                        ...result,
-                        financials: {
-                            ...result.financials,
-                            us_10_year_treasury: treasury10Year.rate,
-                            us_10_year_treasury_date: treasury10Year.date,
-                        },
-                        api_snapshot: {
-                            ...(result.api_snapshot || {}),
-                            us_10_year_treasury: treasury10Year.rate,
-                        },
-                    };
-                } else {
-                    result = {
-                        ...result,
-                        message: `${result.message} 10Y Treasury from FRED was unavailable.`,
-                    };
-                }
-            } catch (fredError) {
-                console.warn('FRED 10Y fetch failed:', fredError);
                 result = {
                     ...result,
-                    message: `${result.message} 10Y Treasury from FRED could not be retrieved.`,
+                    financials: {
+                        ...result.financials,
+                        us_10_year_treasury: treasury10Year.rate,
+                        us_10_year_treasury_date: treasury10Year.date,
+                    },
+                    api_snapshot: {
+                        ...(result.api_snapshot || {}),
+                        us_10_year_treasury: treasury10Year.rate,
+                    },
                 };
+                fredStatusMessage = '10Y Treasury loaded from FRED (DGS10).';
+            } catch (fredError) {
+                console.warn('FRED 10Y fetch failed:', fredError);
+                const fredMessage =
+                    fredError instanceof FredTreasuryError
+                        ? fredError.message
+                        : 'FRED unknown error.';
+                fredStatusMessage = `10Y Treasury not loaded: ${fredMessage}`;
             }
+
+            const financials = result.financials || {};
+            const hasProviderTaxFields = [
+                financials.assessed_value,
+                financials.market_value,
+                financials.tax_amount,
+                financials.tax_prev_year_amount,
+                financials.tax_year,
+                financials.millage_rate,
+                financials.assessment_ratio,
+            ].some((value) => value !== null && value !== undefined);
+
+            const providerMessage =
+                typeof result.message === 'string' && result.message.trim().length > 0
+                    ? result.message.trim()
+                    : '';
+            let taxMessage = '';
+            if (!result.apn_found) {
+                taxMessage = providerMessage || `${PROVIDER_LABELS[provider]}: unable to locate property tax records for this property.`;
+            } else if (hasProviderTaxFields) {
+                taxMessage = providerMessage || `${PROVIDER_LABELS[provider]}: tax financial fields loaded successfully.`;
+            } else {
+                taxMessage = providerMessage || `${PROVIDER_LABELS[provider]}: property found, but provider did not return tax financial fields.`;
+            }
+
+            result = {
+                ...result,
+                message: fredStatusMessage ? `${taxMessage} ${fredStatusMessage}` : taxMessage,
+            };
         }
 
         return NextResponse.json(result, {

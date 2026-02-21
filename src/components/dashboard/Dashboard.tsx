@@ -862,9 +862,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
         : typeof inputs?.spreadsheet_id === 'string' && inputs.spreadsheet_id.trim()
             ? inputs.spreadsheet_id.trim()
             : '';
-    const shareUrl = resolvedShareId && typeof window !== 'undefined'
-        ? `${window.location.origin}/share/${encodeURIComponent(resolvedShareId)}`
-        : null;
 
     const realEstateInputRaw = inputs?.real_estate_valuation;
     const [realEstateDraft, setRealEstateDraft] = useState<string>(
@@ -1106,19 +1103,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         [outputs]
     );
 
-    const [copied, setCopied] = useState(false);
     const isReadOnly = readOnly || !onInputChange;
-
-    const handleShare = async () => {
-        if (!shareUrl) return;
-        try {
-            await navigator.clipboard.writeText(shareUrl);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (error) {
-            console.error('Unable to copy share link', error);
-        }
-    };
 
     const projectName = inputs?.name || 'Valuation Report';
     const projectAddress = inputs?.address || 'Address pending';
@@ -1157,16 +1142,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         >
                             <span className="material-symbols-outlined mr-2 text-[18px]">refresh</span>
                             {refreshingOutputs ? 'Refreshing...' : 'Refresh Outputs'}
-                        </button>
-                    )}
-                    {!isReadOnly && shareUrl && (
-                        <button
-                            className="flex items-center justify-center rounded-lg h-10 px-4 bg-white dark:bg-[#232f48] hover:bg-slate-50 dark:hover:bg-[#2d3b55] text-slate-700 dark:text-white text-sm font-bold transition-colors border border-slate-200 dark:border-transparent shadow-sm"
-                            onClick={handleShare}
-                            type="button"
-                        >
-                            <span className="material-symbols-outlined mr-2 text-[18px]">share</span>
-                            {copied ? 'Link copied!' : 'Share'}
                         </button>
                     )}
                     <button

@@ -657,6 +657,26 @@ export const WizardLayout = ({
                 if (currentStep === 3) {
                     await syncPnlPlanB();
                 }
+                if (currentStep === 5) {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const token = session?.access_token;
+                    try {
+                        const runRes = await fetch('/api/sheet/run-objective-search', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': token ? `Bearer ${token}` : '',
+                            },
+                            body: JSON.stringify({ projectId }),
+                        });
+                        const runJson = await runRes.json().catch(() => ({}));
+                        if (!runRes.ok) {
+                            console.warn('Objective search failed before results:', runJson?.error || runRes.statusText);
+                        }
+                    } catch (runError: any) {
+                        console.warn('Objective search request failed before results:', runError?.message || runError);
+                    }
+                }
             } finally {
                 setNextSyncing(false);
             }

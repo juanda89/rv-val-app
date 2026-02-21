@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDriveClient } from '@/lib/google';
+import { getDriveClientWithEnvOAuth } from '@/lib/google';
 
 export const runtime = 'nodejs';
 
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
             return NextResponse.json({ error: 'Missing spreadsheetId' }, { status: 400 });
         }
 
-        const drive = await getDriveClient();
+        const drive = await getDriveClientWithEnvOAuth(req);
         const exportResponse = await drive.files.export(
             {
                 fileId: spreadsheetId,
@@ -43,4 +43,3 @@ export async function GET(req: Request) {
         );
     }
 }
-

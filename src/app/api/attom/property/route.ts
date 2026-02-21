@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchCountyFips } from '@/lib/censusFips';
 import { lookupHudChas } from '@/lib/hudChas';
+import { getAttomApiKey } from '@/lib/attomKey';
 
 export const runtime = 'nodejs';
 
@@ -153,6 +154,89 @@ const toAcres = (lotSizeSqft: number | null) => {
     return Number((lotSizeSqft / 43560).toFixed(2));
 };
 
+const normalizeOwnerCandidate = (value: unknown) => {
+    if (value === null || value === undefined) return null;
+    const normalized = String(value).trim().replace(/\s+/g, ' ');
+    if (!normalized) return null;
+    if (/^(company|individual|unknown|null|n\/a|na)$/i.test(normalized)) return null;
+    return normalized;
+};
+
+const toUnitText = (value: unknown) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const parseLotArea = (lot: Record<string, any>, summary: Record<string, any>) => {
+    let acreage = pickNumber(
+        lot?.lotSizeAcres,
+        lot?.acres,
+        lot?.areaAcres,
+        lot?.siteAreaAcres,
+        summary?.acres,
+        summary?.lotSizeAcres
+    );
+
+    let lotSizeSqft = pickNumber(
+        lot?.lotSizeSqFt,
+        lot?.lotSizeSquareFeet,
+        lot?.areaSqFt,
+        lot?.siteAreaSqFt,
+        summary?.lotSizeSqFt,
+        summary?.lotSizeSquareFeet
+    );
+
+    const lotCandidates = [lot?.lotSize1, lot?.lotSize2, lot?.lotSize];
+    for (const candidate of lotCandidates) {
+        if (!candidate) continue;
+
+        if (typeof candidate === 'number') {
+            if (lotSizeSqft === null) lotSizeSqft = candidate;
+            continue;
+        }
+
+        if (typeof candidate !== 'object') continue;
+
+        const size = pickNumber(candidate?.size, candidate?.value, candidate?.amount);
+        if (size === null) continue;
+
+        const unitText = toUnitText(
+            candidate?.units ||
+            candidate?.unit ||
+            candidate?.uom ||
+            candidate?.unitType ||
+            candidate?.label ||
+            candidate?.description
+        );
+
+        if (unitText.includes('acre')) {
+            if (acreage === null) acreage = size;
+            continue;
+        }
+
+        if (
+            unitText.includes('sqft') ||
+            unitText.includes('squarefeet') ||
+            unitText.includes('sf') ||
+            unitText.includes('sqft')
+        ) {
+            if (lotSizeSqft === null) lotSizeSqft = size;
+            continue;
+        }
+
+        // If unit is absent/unknown, prefer using the value as-is only when we still have no better source.
+        if (lotSizeSqft === null && acreage === null) {
+            lotSizeSqft = size;
+        }
+    }
+
+    if (acreage === null && lotSizeSqft !== null) {
+        acreage = toAcres(lotSizeSqft);
+    }
+    if (lotSizeSqft === null && acreage !== null) {
+        lotSizeSqft = Number((acreage * 43560).toFixed(2));
+    }
+
+    return { acreage, lotSizeSqft };
+};
+
 const extractFips = (property: Record<string, any>) => {
     const candidates = [
         property?.area?.county?.fips,
@@ -222,16 +306,36 @@ const extractOwnerName = (property: Record<string, any>) => {
     const ownerCandidates = new Set<string>();
 
     const addCandidate = (value: unknown) => {
-        if (value === null || value === undefined) return;
-        const normalized = String(value).trim();
+        const normalized = normalizeOwnerCandidate(value);
         if (!normalized) return;
         ownerCandidates.add(normalized);
     };
 
     const blockedOwnerKeyPattern =
-        /(mail|address|city|state|zip|postal|phone|email|id|type|company|corporate|careof|care_of)/i;
+        /(mail|address|city|state|zip|postal|phone|email|id|careof|care_of)/i;
     const explicitOwnerKeyPattern =
-        /(ownername|owner_name|owner\d+name|ownerfull|owner_full|owner1|owner2|primaryowner|secondaryowner|beneficialowner)/i;
+        /(ownername|owner_name|owner\d+name|ownerfull|owner_full|owner1|owner2|primaryowner|secondaryowner|beneficialowner|name1full|name2full|companyname|corporatename|businessname|llcname)/i;
+
+    const pickFirst = (node: any, keys: string[]) => {
+        if (!node || typeof node !== 'object') return null;
+        for (const [k, v] of Object.entries(node)) {
+            const normalizedKey = String(k).toLowerCase();
+            if (keys.includes(normalizedKey) && typeof v === 'string' && v.trim()) {
+                return v.trim();
+            }
+        }
+        return null;
+    };
+
+    const addNameFromNode = (node: any) => {
+        if (!node || typeof node !== 'object') return;
+        const first = pickFirst(node, ['firstname', 'first_name', 'first', 'fname', 'givenname']);
+        const last = pickFirst(node, ['lastname', 'last_name', 'last', 'lname', 'surname']);
+        const fullFromParts = buildFullName(first, last);
+        if (fullFromParts) addCandidate(fullFromParts);
+        const directFull = pickFirst(node, ['fullname', 'full_name', 'namefull', 'name1full', 'name2full', 'ownername']);
+        if (directFull) addCandidate(directFull);
+    };
 
     const collectOwnerCandidates = (node: any, depth = 0, ownerContext = false) => {
         if (!node || depth > 4) return;
@@ -240,6 +344,10 @@ const extractOwnerName = (property: Record<string, any>) => {
             return;
         }
         if (typeof node !== 'object') return;
+
+        if (ownerContext) {
+            addNameFromNode(node);
+        }
 
         for (const [rawKey, rawValue] of Object.entries(node)) {
             const key = String(rawKey).toLowerCase();
@@ -303,11 +411,38 @@ const extractOwnerName = (property: Record<string, any>) => {
     collectOwnerCandidates(owner, 0, true);
     collectOwnerCandidates(property?.ownership, 0, true);
     collectOwnerCandidates(property?.ownerInfo, 0, true);
+    collectOwnerCandidates(property, 0, false);
 
     for (const candidate of ownerCandidates) {
         return candidate;
     }
     return null;
+};
+
+const extractOwnerFromKnownPaths = (property: Record<string, any>) => {
+    const candidates = [
+        property?.owner?.owner1?.fullName,
+        property?.owner?.owner2?.fullName,
+        property?.owner?.owner1?.name,
+        property?.owner?.owner2?.name,
+        property?.owner?.owner1?.name1Full,
+        property?.owner?.owner2?.name1Full,
+        property?.owner?.ownerName,
+        property?.owner?.owner_name,
+        property?.ownership?.owner1?.fullName,
+        property?.ownership?.owner2?.fullName,
+        property?.ownerInfo?.owner1?.fullName,
+        property?.ownerInfo?.owner2?.fullName,
+        property?.assessment?.owner?.owner1?.fullName,
+        property?.assessment?.owner?.owner2?.fullName,
+    ]
+        .map((value) => normalizeOwnerCandidate(value))
+        .filter((value): value is string => Boolean(value));
+
+    if (candidates.length === 0) return null;
+    const unique = Array.from(new Set(candidates));
+    if (unique.length === 1) return unique[0];
+    return `${unique[0]} & ${unique[1]}`;
 };
 
 const extractProperties = (payload: any) => {
@@ -679,9 +814,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing address or parcel info' }, { status: 400 });
         }
 
-        const apiKey = process.env.ATTOM_API_KEY;
+        const apiKey = await getAttomApiKey();
         if (!apiKey) {
-            return NextResponse.json({ error: 'Missing ATTOM_API_KEY' }, { status: 500 });
+            return NextResponse.json({ error: 'Missing ATTOM API key (DB and ENV).' }, { status: 500 });
         }
         const geminiApiKey = process.env.GEMINI_API_KEY;
 
@@ -921,16 +1056,9 @@ export async function POST(req: Request) {
         const assessmentItems = property?.assessment || property?.assessmentHistory || property?.assessments;
         const taxItems = property?.tax || property?.taxHistory || property?.taxes;
 
-        const lotSizeSqft = pickNumber(
-            lot?.lotSize1?.size,
-            lot?.lotSize2?.size,
-            lot?.lotSize?.size,
-            lot?.lotSize1,
-            lot?.lotSize2,
-            summary?.lotsize1,
-            summary?.lotsize2
-        );
-        const acres = toAcres(lotSizeSqft);
+        const lotArea = parseLotArea(lot, summary);
+        const lotSizeSqft = lotArea.lotSizeSqft ?? pickNumber(summary?.lotsize1, summary?.lotsize2);
+        const acres = lotArea.acreage ?? toAcres(lotSizeSqft);
         const propertyType = summary?.propclass || summary?.propType || summary?.propertyType || null;
         const yearBuilt = summary?.yearbuilt || summary?.yearBuilt || null;
 
@@ -1349,6 +1477,8 @@ export async function POST(req: Request) {
             console.warn('Treasury 10Y fetch failed:', error);
         }
 
+        const resolvedOwnerName = extractOwnerFromKnownPaths(property) || extractOwnerName(property);
+
         return NextResponse.json({
             property_identity: {
                 address: oneLine || address,
@@ -1358,7 +1488,7 @@ export async function POST(req: Request) {
                     property?.identifier?.parcelId ||
                     null,
                 fips_code: fipsCode,
-                owner: extractOwnerName(property),
+                owner: resolvedOwnerName,
                 county,
                 city,
                 state,

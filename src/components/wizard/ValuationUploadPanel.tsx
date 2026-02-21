@@ -6,6 +6,12 @@ import type { ApiProvider } from '@/types/apiProvider';
 import { API_PROVIDER_LABELS } from '@/types/apiProvider';
 
 type UploadStatus = 'idle' | 'loading' | 'success' | 'error';
+type AttomKeyStatus = {
+    hasKey: boolean;
+    source: 'db' | 'env' | 'none';
+    maskedKey?: string;
+    updatedAt?: string;
+};
 
 interface ValuationUploadPanelProps {
     onAutofill: (data: Record<string, any>) => Promise<void> | void;
@@ -31,6 +37,12 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
     const [message, setMessage] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [fileName, setFileName] = useState('');
+    const [attomKeyInput, setAttomKeyInput] = useState('');
+    const [attomSaving, setAttomSaving] = useState(false);
+    const [attomLoading, setAttomLoading] = useState(true);
+    const [attomStatus, setAttomStatus] = useState<AttomKeyStatus | null>(null);
+    const [attomMessage, setAttomMessage] = useState<string | null>(null);
+    const [attomError, setAttomError] = useState<string | null>(null);
     const busyCallbackRef = useRef<ValuationUploadPanelProps['onBusyChange']>(onBusyChange);
 
     React.useEffect(() => {
@@ -40,6 +52,38 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
     React.useEffect(() => {
         busyCallbackRef.current?.(status === 'loading');
     }, [status]);
+
+    const getAuthHeader = async (): Promise<Record<string, string>> => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return {};
+        return { Authorization: `Bearer ${token}` };
+    };
+
+    const loadAttomStatus = React.useCallback(async () => {
+        setAttomLoading(true);
+        setAttomError(null);
+        try {
+            const headers = await getAuthHeader();
+            const response = await fetch('/api/settings/attom-key', {
+                method: 'GET',
+                headers,
+            });
+            const payload = await parseJsonSafely(response);
+            if (!response.ok) {
+                throw new Error(payload?.error || 'Failed to load ATTOM API key status');
+            }
+            setAttomStatus(payload);
+        } catch (error: any) {
+            setAttomError(error?.message || 'Failed to load ATTOM API key status');
+        } finally {
+            setAttomLoading(false);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        void loadAttomStatus();
+    }, [loadAttomStatus]);
 
     const reset = () => {
         setStatus('idle');
@@ -171,6 +215,45 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
         onApiChange(target);
     };
 
+    const handleSaveAttomKey = async () => {
+        const apiKey = attomKeyInput.trim();
+        if (!apiKey) {
+            setAttomError('ATTOM API key is required.');
+            return;
+        }
+
+        setAttomSaving(true);
+        setAttomError(null);
+        setAttomMessage(null);
+        try {
+            const headers = await getAuthHeader();
+            const response = await fetch('/api/settings/attom-key', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...headers,
+                },
+                body: JSON.stringify({ apiKey }),
+            });
+            const payload = await parseJsonSafely(response);
+            if (!response.ok) {
+                throw new Error(payload?.error || 'Failed to save ATTOM API key');
+            }
+            setAttomStatus({
+                hasKey: true,
+                source: 'db',
+                maskedKey: payload?.maskedKey,
+                updatedAt: payload?.updatedAt,
+            });
+            setAttomMessage('ATTOM API key saved successfully.');
+            setAttomKeyInput('');
+        } catch (error: any) {
+            setAttomError(error?.message || 'Failed to save ATTOM API key');
+        } finally {
+            setAttomSaving(false);
+        }
+    };
+
     return (
         <aside className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-[#283339] bg-slate-100 dark:bg-[#0f1418] text-slate-900 dark:text-white px-6 py-6 h-full transition-colors duration-200">
             <div className="sticky top-6 space-y-6">
@@ -294,6 +377,46 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
                                 </button>
                             );
                         })}
+                    </div>
+                </div>
+
+                <div className="border-t border-slate-200 dark:border-[#283339] pt-5 space-y-3">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-gray-300">
+                        ATTOM API KEY
+                    </h4>
+
+                    <div className="space-y-2">
+                        <input
+                            type="password"
+                            value={attomKeyInput}
+                            onChange={(event) => setAttomKeyInput(event.target.value)}
+                            placeholder="Enter ATTOM API key"
+                            className="w-full rounded-lg border border-slate-300 dark:border-[#283339] bg-white dark:bg-[#141b21] px-3 py-2 text-xs text-slate-700 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-[#13a4ec]"
+                        />
+                        <button
+                            type="button"
+                            onClick={handleSaveAttomKey}
+                            disabled={attomSaving}
+                            className="w-full rounded-lg bg-[#13a4ec] px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            {attomSaving ? 'Saving...' : 'Save'}
+                        </button>
+                    </div>
+
+                    <div className="text-[11px] text-slate-500 dark:text-gray-400 space-y-1">
+                        {attomLoading ? (
+                            <p>Loading key status...</p>
+                        ) : (
+                            <>
+                                <p>
+                                    Source: <span className="font-semibold uppercase">{attomStatus?.source || 'none'}</span>
+                                </p>
+                                {attomStatus?.maskedKey ? <p>Key: {attomStatus.maskedKey}</p> : <p>Key: not set</p>}
+                                {attomStatus?.updatedAt ? <p>Updated: {new Date(attomStatus.updatedAt).toLocaleString()}</p> : null}
+                            </>
+                        )}
+                        {attomMessage ? <p className="text-emerald-500 dark:text-emerald-300">{attomMessage}</p> : null}
+                        {attomError ? <p className="text-red-500 dark:text-red-300">{attomError}</p> : null}
                     </div>
                 </div>
             </div>

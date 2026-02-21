@@ -60,6 +60,11 @@ export const getDriveClientWithEnvOAuth = async (req?: Request) => {
     return google.drive({ version: 'v3', auth: oauthClient });
 };
 
+export const getScriptClientWithEnvOAuth = async (req?: Request) => {
+    const oauthClient = await getOAuthClientFromEnv(req);
+    return google.script({ version: 'v1', auth: oauthClient });
+};
+
 export const getFileMetadata = async (fileId: string) => {
     const drive = await getDriveClient();
     const response = await drive.files.get({
