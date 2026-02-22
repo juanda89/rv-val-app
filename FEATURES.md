@@ -53,10 +53,13 @@ When any feature is added or changed:
 ## 5) Upload + PDF Analysis
 - Supported formats: `.csv`, `.xls`, `.xlsx`, `.pdf`.
 - Timeout for analysis network operations is `120s`.
+- Analysis order is:
+  - direct analyze first (`/api/valuation/analyze`)
+  - storage analyze fallback (`/api/valuation/analyze-url`) only if direct fails
 - Timeout applies to:
   - storage upload
-  - analyze-url request
-  - direct analyze fallback
+  - direct analyze request
+  - analyze-url fallback request
 - Timeout does not interrupt local merge lifecycle.
 - On upload error (including timeout), error message stays visible until:
   - user uploads a new file, or
@@ -105,6 +108,7 @@ When any feature is added or changed:
   - Discrepancy labels still accurate.
   - Map still appears when PDF provides address.
   - Timeout/error UX behavior unchanged unless explicitly requested.
+  - ATTOM acreage extraction still supports `lotSize1` as acres when present.
 
 ## Regression Checklist (Run on Every Change)
 - [ ] PDF upload fills fields without overriding manual data.

@@ -167,23 +167,27 @@ const toUnitText = (value: unknown) => String(value ?? '').toLowerCase().replace
 const parseLotArea = (lot: Record<string, any>, summary: Record<string, any>) => {
     let acreage = pickNumber(
         lot?.lotSizeAcres,
+        lot?.lotSize1,
         lot?.acres,
         lot?.areaAcres,
         lot?.siteAreaAcres,
         summary?.acres,
-        summary?.lotSizeAcres
+        summary?.lotSizeAcres,
+        summary?.lotsize1
     );
 
     let lotSizeSqft = pickNumber(
         lot?.lotSizeSqFt,
         lot?.lotSizeSquareFeet,
+        lot?.lotSize2,
         lot?.areaSqFt,
         lot?.siteAreaSqFt,
         summary?.lotSizeSqFt,
-        summary?.lotSizeSquareFeet
+        summary?.lotSizeSquareFeet,
+        summary?.lotsize2
     );
 
-    const lotCandidates = [lot?.lotSize1, lot?.lotSize2, lot?.lotSize];
+    const lotCandidates = [lot?.lotSize2, lot?.lotSize];
     for (const candidate of lotCandidates) {
         if (!candidate) continue;
 
@@ -1057,7 +1061,7 @@ export async function POST(req: Request) {
         const taxItems = property?.tax || property?.taxHistory || property?.taxes;
 
         const lotArea = parseLotArea(lot, summary);
-        const lotSizeSqft = lotArea.lotSizeSqft ?? pickNumber(summary?.lotsize1, summary?.lotsize2);
+        const lotSizeSqft = lotArea.lotSizeSqft ?? pickNumber(summary?.lotsize2);
         const acres = lotArea.acreage ?? toAcres(lotSizeSqft);
         const propertyType = summary?.propclass || summary?.propType || summary?.propertyType || null;
         const yearBuilt = summary?.yearbuilt || summary?.yearBuilt || null;

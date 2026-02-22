@@ -174,20 +174,14 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
         }
     };
 
-    const analyzeViaStorageUrl = async (file: File) => {
-        setLoadingTitle('Uploading file...');
-        setLoadingDetail('Preparing secure upload...');
-        const fileUrl = await withTimeout(uploadToStorage(file), REQUEST_TIMEOUT_MS, 'File upload');
+    const analyzeViaDirectUpload = async (file: File) => {
         setLoadingTitle('AI is analyzing the document...');
         setLoadingDetail('Processing and structuring the extracted data.');
-        const response = await fetchWithTimeout('/api/valuation/analyze-url', {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetchWithTimeout('/api/valuation/analyze', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                fileUrl,
-                fileName: file.name,
-                mimeType: file.type || ''
-            })
+            body: formData,
         }, REQUEST_TIMEOUT_MS);
         const payload = await parseJsonSafely(response);
         if (!response.ok) {
@@ -196,14 +190,18 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
         return payload?.data || {};
     };
 
-    const analyzeViaDirectUpload = async (file: File) => {
-        setLoadingTitle('Retrying with direct analysis...');
-        setLoadingDetail('Storage path was slow or unavailable, trying fallback.');
-        const formData = new FormData();
-        formData.append('file', file);
-        const response = await fetchWithTimeout('/api/valuation/analyze', {
+    const analyzeViaStorageUrl = async (file: File) => {
+        setLoadingTitle('Retrying with storage-based analysis...');
+        setLoadingDetail('Direct analysis was slow or unavailable, trying fallback.');
+        const fileUrl = await withTimeout(uploadToStorage(file), REQUEST_TIMEOUT_MS, 'File upload');
+        const response = await fetchWithTimeout('/api/valuation/analyze-url', {
             method: 'POST',
-            body: formData,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fileUrl,
+                fileName: file.name,
+                mimeType: file.type || ''
+            })
         }, REQUEST_TIMEOUT_MS);
         const payload = await parseJsonSafely(response);
         if (!response.ok) {
@@ -223,10 +221,10 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
         try {
             let analyzedData: Record<string, any> | null = null;
             try {
-                analyzedData = await analyzeViaStorageUrl(file);
-            } catch (storagePathError: any) {
-                console.warn('Storage-based analyze failed, falling back to direct upload:', storagePathError?.message || storagePathError);
                 analyzedData = await analyzeViaDirectUpload(file);
+            } catch (directPathError: any) {
+                console.warn('Direct analyze failed, falling back to storage-based analysis:', directPathError?.message || directPathError);
+                analyzedData = await analyzeViaStorageUrl(file);
             }
 
             setLoadingTitle('Applying extracted fields...');
