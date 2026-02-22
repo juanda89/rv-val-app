@@ -91,6 +91,11 @@ export const WizardLayout = ({
             .toLowerCase()
             .replace(/[\s-]+/g, '')
             .trim();
+    const normalizeParcelIdentifier = (value: unknown) => {
+        const raw = String(value ?? '').trim();
+        if (!raw) return '';
+        return raw.replace(/[\s-]+/g, '');
+    };
     const parseAmount = (value: unknown) => {
         if (value === null || value === undefined || value === '') return null;
         if (typeof value === 'number') return Number.isFinite(value) ? value : null;
@@ -411,17 +416,7 @@ export const WizardLayout = ({
         const incomeFromUpload: Array<{ id: string; name: string; amount: number }> = [];
         const expenseFromUpload: Array<{ id: string; name: string; amount: number }> = [];
         const skipAutoFields = new Set([
-            'city',
-            'state',
-            'county',
-            'zip_code',
-            'parcel_1',
-            'parcelNumber',
-            'parcel_1_acreage',
-            'acreage',
-            'property_type',
-            'year_built',
-            'last_sale_price',
+            // Never accept coordinates directly from document extraction.
             'lat',
             'lng',
         ]);
@@ -440,16 +435,19 @@ export const WizardLayout = ({
                 }
                 return;
             }
-            pdfValues[key] = value;
+            const normalizedValue =
+                key === 'parcel_1' || key === 'parcelNumber'
+                    ? normalizeParcelIdentifier(value)
+                    : value;
+            pdfValues[key] = normalizedValue;
             if (!skipAutoFields.has(key)) {
-                updates[key] = value;
+                updates[key] = normalizedValue;
             }
         });
-        if (pdfValues.parcelNumber && !pdfValues.parcel_1) {
-            pdfValues.parcel_1 = pdfValues.parcelNumber;
-        }
-        if (pdfValues.parcel_1 && !pdfValues.parcelNumber) {
-            pdfValues.parcelNumber = pdfValues.parcel_1;
+        const normalizedPdfParcel = normalizeParcelIdentifier(pdfValues.parcel_1 || pdfValues.parcelNumber);
+        if (normalizedPdfParcel) {
+            pdfValues.parcel_1 = normalizedPdfParcel;
+            pdfValues.parcelNumber = normalizedPdfParcel;
         }
         if (pdfValues.acreage && !pdfValues.parcel_1_acreage) {
             pdfValues.parcel_1_acreage = pdfValues.acreage;
@@ -465,6 +463,30 @@ export const WizardLayout = ({
         }
         if (pdfValues.zip && !pdfValues.zip_code) {
             pdfValues.zip_code = pdfValues.zip;
+        }
+        // Keep aliases aligned for the immediate form update path as well.
+        const normalizedUpdatesParcel = normalizeParcelIdentifier(updates.parcel_1 || updates.parcelNumber);
+        if (normalizedUpdatesParcel) {
+            updates.parcel_1 = normalizedUpdatesParcel;
+            updates.parcelNumber = normalizedUpdatesParcel;
+        }
+        if (updates.acreage && !updates.parcel_1_acreage) {
+            updates.parcel_1_acreage = updates.acreage;
+        }
+        if (updates.parcel_1_acreage && !updates.acreage) {
+            updates.acreage = updates.parcel_1_acreage;
+        }
+        if (updates.address && !updates.mobile_home_park_address) {
+            updates.mobile_home_park_address = updates.address;
+        }
+        if (updates.mobile_home_park_address && !updates.address) {
+            updates.address = updates.mobile_home_park_address;
+        }
+        if (updates.name && !updates.mobile_home_park_name) {
+            updates.mobile_home_park_name = updates.name;
+        }
+        if (updates.mobile_home_park_name && !updates.name) {
+            updates.name = updates.mobile_home_park_name;
         }
 
         setFormData((prev: any) => {
@@ -647,6 +669,7 @@ export const WizardLayout = ({
             await handleStep1Complete(formData);
             return;
         }
+        let canAdvance = true;
         if (projectId) {
             setNextSyncing(true);
             try {
@@ -660,27 +683,30 @@ export const WizardLayout = ({
                 if (currentStep === 5) {
                     const { data: { session } } = await supabase.auth.getSession();
                     const token = session?.access_token;
-                    try {
-                        const runRes = await fetch('/api/sheet/run-objective-search', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': token ? `Bearer ${token}` : '',
-                            },
-                            body: JSON.stringify({ projectId }),
-                        });
-                        const runJson = await runRes.json().catch(() => ({}));
-                        if (!runRes.ok) {
-                            console.warn('Objective search failed before results:', runJson?.error || runRes.statusText);
-                        }
-                    } catch (runError: any) {
-                        console.warn('Objective search request failed before results:', runError?.message || runError);
+                    const runRes = await fetch('/api/sheet/run-objective-search', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': token ? `Bearer ${token}` : '',
+                        },
+                        body: JSON.stringify({ projectId }),
+                    });
+                    const runJson = await runRes.json().catch(() => ({}));
+                    if (!runRes.ok) {
+                        throw new Error(
+                            runJson?.error || 'Failed to execute objective search. Please retry before viewing Results.'
+                        );
                     }
                 }
+            } catch (error: any) {
+                console.error('Failed before advancing step:', error);
+                alert(error?.message || 'Failed to advance to Results.');
+                canAdvance = false;
             } finally {
                 setNextSyncing(false);
             }
         }
+        if (!canAdvance) return;
         setCurrentStep(prev => Math.min(prev + 1, STEPS.length));
     };
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
@@ -811,6 +837,7 @@ export const WizardLayout = ({
                                 inputs={formData}
                                 onInputChange={handleDataChange}
                                 shareId={formData?.spreadsheet_id}
+                                projectId={projectId}
                                 onRefreshOutputs={refreshOutputs}
                                 refreshingOutputs={refreshingOutputs}
                             />

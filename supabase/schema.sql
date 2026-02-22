@@ -6,6 +6,9 @@ create table projects (
   name text not null,
   address text,
   spreadsheet_id text not null,
+  report_copy_spreadsheet_id text,
+  report_copy_url text,
+  report_copy_created_at timestamp with time zone,
   status text default 'active'
 );
 
@@ -23,6 +26,11 @@ create policy "Users can insert their own projects"
 create policy "Users can delete their own projects"
   on projects for delete
   using (auth.uid() = user_id);
+
+create policy "Users can update their own projects"
+  on projects for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 -- Global application settings
 create table if not exists app_settings (

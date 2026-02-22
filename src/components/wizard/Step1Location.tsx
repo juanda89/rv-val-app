@@ -333,17 +333,20 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
         if (!demographics) return;
 
         const assignIfAllowed = (fieldKey: string, nextValue: any) => {
-            if (!shouldApplyApiValue({
-                fieldKey,
-                nextValue,
-                currentValue: initialData?.[fieldKey],
-                defaultValues,
-                previousApiValues: apiValues,
-            })) {
-                return;
-            }
-            targetPayload[fieldKey] = nextValue;
+            if (nextValue === null || nextValue === undefined || nextValue === '') return;
+            // Always persist latest API snapshot for discrepancy labels.
             targetApiValues[fieldKey] = nextValue;
+            if (
+                shouldApplyApiValue({
+                    fieldKey,
+                    nextValue,
+                    currentValue: initialData?.[fieldKey],
+                    defaultValues,
+                    previousApiValues: apiValues,
+                })
+            ) {
+                targetPayload[fieldKey] = nextValue;
+            }
         };
 
         assignIfAllowed('population', demographics.population);
@@ -371,12 +374,10 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
     }, [apiValues, defaultValues, initialData, resolveDemographicsFromDataUsa]);
 
     React.useEffect(() => {
-        const address = initialData?.address;
+        const address = initialData?.address || initialData?.mobile_home_park_address;
         if (!address || !ready) return;
         if (initialData?.lat && initialData?.lng) return;
         if (lastGeocodedAddressRef.current === address) return;
-
-        lastGeocodedAddressRef.current = address;
         let isActive = true;
         const requestSeq = ++geocodeRequestSeqRef.current;
 
@@ -388,6 +389,22 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
                 setCoordinates({ lat, lng });
 
                 const updates: Record<string, any> = {};
+                const apiValuesUpdate: Record<string, any> = { ...(initialData?.api_values || {}) };
+                const assignGeoValue = (fieldKey: string, nextValue: any) => {
+                    if (nextValue === null || nextValue === undefined || String(nextValue).trim() === '') return;
+                    apiValuesUpdate[fieldKey] = nextValue;
+                    if (
+                        shouldApplyApiValue({
+                            fieldKey,
+                            nextValue,
+                            currentValue: initialData?.[fieldKey],
+                            defaultValues,
+                            previousApiValues: apiValues,
+                        })
+                    ) {
+                        updates[fieldKey] = nextValue;
+                    }
+                };
                 if (!initialData?.lat && !initialData?.lng) {
                     updates.lat = lat;
                     updates.lng = lng;
@@ -398,30 +415,41 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
                 const state = extractStateFromGeocode(results[0]);
                 const zipCode = extractZipFromGeocode(results[0]);
 
-                if (city) updates.city = city;
-                if (county) updates.county = county;
-                if (state) updates.state = state;
-                if (zipCode) updates.zip_code = zipCode;
+                assignGeoValue('city', city);
+                assignGeoValue('county', county);
+                assignGeoValue('state', state);
+                assignGeoValue('zip_code', zipCode);
                 const fipsCode = await resolveFipsFromCensusByCoords(lat, lng);
                 if (!isActive || requestSeq !== geocodeRequestSeqRef.current) return;
                 if (fipsCode) {
-                    updates.fips_code = fipsCode;
-                    updates.api_values = { ...(initialData?.api_values || {}), fips_code: fipsCode };
+                    assignGeoValue('fips_code', fipsCode);
                 }
-                if (address) updates.mobile_home_park_address = address;
+                if (address) {
+                    updates.address = address;
+                    updates.mobile_home_park_address = address;
+                }
+                if (Object.keys(apiValuesUpdate).length > 0) {
+                    updates.api_values = apiValuesUpdate;
+                }
 
                 if (Object.keys(updates).length > 0) {
                     onDataChange(updates);
                 }
+                // Mark as geocoded only after successful geocode flow.
+                lastGeocodedAddressRef.current = address;
             })
             .catch((error) => {
                 console.error('Geocode failed:', error);
+                // Allow retry on next render/state change when a transient geocode failure happens.
+                if (lastGeocodedAddressRef.current === address) {
+                    lastGeocodedAddressRef.current = '';
+                }
             });
 
         return () => {
             isActive = false;
         };
-    }, [initialData?.address, initialData?.lat, initialData?.lng, initialData?.city, initialData?.county, initialData?.api_values, onDataChange, ready, resolveFipsFromCensusByCoords]);
+    }, [initialData?.address, initialData?.mobile_home_park_address, initialData?.lat, initialData?.lng, initialData?.city, initialData?.county, initialData?.api_values, onDataChange, ready, resolveFipsFromCensusByCoords]);
 
     const shouldFillWithAttom = (currentValue: any, key: string) => {
         if (isEmptyOrDefault(key, currentValue)) return true;
@@ -651,24 +679,44 @@ const GooglePlacesInput = ({ onDataChange, initialData, onBusyChange, selectedAp
         const payload: Record<string, any> = {
             address: addressToUse,
             mobile_home_park_address: addressToUse,
-            city,
-            state,
-            zip_code: zipCode,
             lat,
             lng,
         };
-        if (county) {
-            payload.county = county;
-        }
+        const apiValuesUpdate: Record<string, any> = { ...(initialData?.api_values || {}) };
+        const assignGeoValue = (fieldKey: string, nextValue: any) => {
+            if (nextValue === null || nextValue === undefined || String(nextValue).trim() === '') return;
+            apiValuesUpdate[fieldKey] = nextValue;
+            if (
+                shouldApplyApiValue({
+                    fieldKey,
+                    nextValue,
+                    currentValue: initialData?.[fieldKey],
+                    defaultValues,
+                    previousApiValues: apiValues,
+                })
+            ) {
+                payload[fieldKey] = nextValue;
+            }
+        };
+
+        assignGeoValue('city', city);
+        assignGeoValue('state', state);
+        assignGeoValue('zip_code', zipCode);
+        assignGeoValue('county', county);
+
         const fipsCode = await resolveFipsFromCensusByCoords(lat, lng);
         if (requestSeq !== geocodeRequestSeqRef.current) return null;
         if (fipsCode) {
-            payload.fips_code = fipsCode;
-            const apiValuesUpdate: Record<string, any> = { ...(initialData?.api_values || {}), fips_code: fipsCode };
+            assignGeoValue('fips_code', fipsCode);
             if (includeDataUsa) {
                 await attachDataUsaDemographics(fipsCode, payload, apiValuesUpdate);
                 if (requestSeq !== geocodeRequestSeqRef.current) return null;
             }
+        } else if (includeDataUsa && initialData?.fips_code) {
+            await attachDataUsaDemographics(String(initialData.fips_code), payload, apiValuesUpdate);
+            if (requestSeq !== geocodeRequestSeqRef.current) return null;
+        }
+        if (Object.keys(apiValuesUpdate).length > 0) {
             payload.api_values = apiValuesUpdate;
         }
         onDataChange(payload);

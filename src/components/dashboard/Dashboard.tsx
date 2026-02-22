@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 
 interface DashboardProps {
     outputs: any;
@@ -8,6 +9,7 @@ interface DashboardProps {
     onInputChange?: (data: any) => void;
     readOnly?: boolean;
     shareId?: string;
+    projectId?: string | null;
     onRefreshOutputs?: () => void;
     refreshingOutputs?: boolean;
 }
@@ -476,6 +478,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     onInputChange,
     readOnly,
     shareId,
+    projectId,
     onRefreshOutputs,
     refreshingOutputs
 }) => {
@@ -1107,14 +1110,81 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     const projectName = inputs?.name || 'Valuation Report';
     const projectAddress = inputs?.address || 'Address pending';
-    const handleDownloadReport = () => {
-        if (!resolvedShareId || typeof window === 'undefined') return;
+    const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
+    const [downloadingFormat, setDownloadingFormat] = useState<'excel' | 'sheets' | null>(null);
+    const downloadMenuRef = React.useRef<HTMLDivElement | null>(null);
+
+    React.useEffect(() => {
+        if (!downloadMenuOpen) return;
+        const onPointerDown = (event: MouseEvent | TouchEvent) => {
+            if (!downloadMenuRef.current) return;
+            const target = event.target as Node | null;
+            if (target && !downloadMenuRef.current.contains(target)) {
+                setDownloadMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', onPointerDown);
+        document.addEventListener('touchstart', onPointerDown);
+        return () => {
+            document.removeEventListener('mousedown', onPointerDown);
+            document.removeEventListener('touchstart', onPointerDown);
+        };
+    }, [downloadMenuOpen]);
+
+    const buildDownloadParams = () => {
         const fileName = projectName.replace(/[^a-zA-Z0-9-_ ]+/g, '').trim() || 'valuation-report';
         const query = new URLSearchParams({
             spreadsheetId: resolvedShareId,
             fileName,
         });
+        if (projectId) {
+            query.set('projectId', projectId);
+        }
+        return query;
+    };
+
+    const handleDownloadExcel = () => {
+        if (!resolvedShareId || typeof window === 'undefined') return;
+        const query = buildDownloadParams();
+        query.set('format', 'excel');
+        setDownloadingFormat('excel');
+        setDownloadMenuOpen(false);
         window.location.href = `/api/projects/download?${query.toString()}`;
+        window.setTimeout(() => setDownloadingFormat(null), 1500);
+    };
+
+    const handleCreateSheetsCopy = async () => {
+        if (!resolvedShareId || !projectId || typeof window === 'undefined') return;
+        const query = buildDownloadParams();
+        query.set('format', 'sheets');
+        setDownloadingFormat('sheets');
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            const response = await fetch(`/api/projects/download?${query.toString()}`, {
+                headers: {
+                    Authorization: token ? `Bearer ${token}` : '',
+                },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.error || 'Failed to create Google Sheets copy');
+            }
+            const url = payload?.url;
+            if (!url) {
+                throw new Error('Google Sheets copy URL was not returned.');
+            }
+            const popup = window.open(url, '_blank', 'noopener,noreferrer');
+            if (!popup) {
+                window.location.href = url;
+            }
+        } catch (error: any) {
+            window.alert(error?.message || 'Failed to create Google Sheets copy');
+        } finally {
+            setDownloadingFormat(null);
+            setDownloadMenuOpen(false);
+        }
     };
 
     return (
@@ -1144,15 +1214,62 @@ export const Dashboard: React.FC<DashboardProps> = ({
                             {refreshingOutputs ? 'Refreshing...' : 'Refresh Outputs'}
                         </button>
                     )}
-                    <button
-                        className="flex items-center justify-center rounded-lg h-10 px-4 bg-[#2b6cee] hover:bg-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-500/20 transition-all"
-                        type="button"
-                        onClick={handleDownloadReport}
-                        disabled={!resolvedShareId}
-                    >
-                        <span className="material-symbols-outlined mr-2 text-[18px]">download</span>
-                        Download Report
-                    </button>
+                    <div className="relative" ref={downloadMenuRef}>
+                        <button
+                            className="flex items-center justify-center rounded-lg h-10 px-4 bg-[#2b6cee] hover:bg-blue-600 text-white text-sm font-bold shadow-lg shadow-blue-500/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                            type="button"
+                            onClick={() => setDownloadMenuOpen((prev) => !prev)}
+                            disabled={!resolvedShareId || downloadingFormat !== null}
+                        >
+                            <span className="material-symbols-outlined mr-2 text-[18px]">download</span>
+                            {downloadingFormat === 'excel'
+                                ? 'Downloading...'
+                                : downloadingFormat === 'sheets'
+                                    ? 'Creating copy...'
+                                    : 'Download Report'}
+                            <span className="material-symbols-outlined ml-1 text-[18px]">expand_more</span>
+                        </button>
+
+                        {downloadMenuOpen && (
+                            <div className="absolute right-0 mt-2 w-60 rounded-xl border border-slate-200 dark:border-[#2d3b55] bg-white dark:bg-[#1c273a] shadow-2xl z-20 p-2">
+                                <button
+                                    type="button"
+                                    onClick={handleCreateSheetsCopy}
+                                    disabled={downloadingFormat !== null || !projectId}
+                                    className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-[#24334b] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
+                                        <path fill="#0F9D58" d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z" />
+                                        <path fill="#34A853" d="M14 2v5h5z" />
+                                        <path fill="#fff" d="M8 11h8v1.6H8zm0 3h8v1.6H8zm0 3h5v1.6H8z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-800 dark:text-white">Google Sheets</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-300">
+                                            {projectId ? 'Create once and open in new tab' : 'Unavailable in shared view'}
+                                        </p>
+                                    </div>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={handleDownloadExcel}
+                                    disabled={downloadingFormat !== null}
+                                    className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-[#24334b] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
+                                        <path fill="#1D6F42" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                        <path fill="#2E7D32" d="M14 2v6h6z" />
+                                        <path fill="#fff" d="m8.6 16 1.8-3-1.7-3h1.8l.9 1.9.9-1.9h1.7l-1.7 3 1.8 3h-1.8l-1-2.1-1 2.1z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-800 dark:text-white">Excel (.xlsx)</p>
+                                        <p className="text-[11px] text-slate-500 dark:text-slate-300">Download report file</p>
+                                    </div>
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

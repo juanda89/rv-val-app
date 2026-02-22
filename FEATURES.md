@@ -1,101 +1,119 @@
-# RV Valuations - Feature Baseline
+# RV Valuations - Features, Requirements, and Conditions
 
-This file is the regression baseline.  
-When a new feature is added or behavior changes, update this file first.
+This file is the source of truth for product behavior.
 
-## 1) Auth and Navigation
-- Google auth login redirects to valuations dashboard.
-- `/projects/create` supports:
-  - New valuation flow.
-  - Edit flow via `?projectId=...`.
-- Shared report view works read-only.
+When any feature is added or changed:
+1. Update this document in the same change.
+2. Verify the affected checklist items before closing the task.
+3. Do not merge behavior that contradicts this file.
 
-## 2) Project Creation and Google Sheet
-- New project is created by calling webhook to duplicate master sheet.
-- The duplicated file id is stored as `projects.spreadsheet_id` in Supabase.
-- After sheet creation:
-  - `Input Fields` column `D` (Default Values) is copied into column `C` only where `C` is empty.
-  - Column `B` labels are not rewritten by app logic.
+## 1) Core Priority Rules (Global)
+- Field source hierarchy is strict:
+  - `manual` (highest priority)
+  - `pdf`
+  - `api` (lowest priority)
+- API can overwrite a value only when:
+  - field is empty, or
+  - field equals default value, or
+  - field equals previous API value (API-over-API allowed).
+- Manual/PDF values must never be silently overwritten by API.
 
-## 3) Input Defaults Behavior
-- In UI, inputs use values loaded from sheet column `C`.
-- If a field in `C` is empty and a default exists in `D`, default is shown as initial value.
-- Defaults are provided to frontend as `default_values`.
+## 2) Discrepancy Rules
+- `pdf_values` always stores extracted PDF values.
+- `api_values` always stores latest API snapshot values.
+- API snapshot values must be stored even when the field is not overwritten (to preserve discrepancy visibility).
+- Labels show:
+  - `PDF discrepancy` when current value differs from `pdf_values[field]`.
+  - `API discrepancy` when current value differs from `api_values[field]`.
+- Discrepancy behavior must remain stable across timeout/retry paths.
 
-## 4) Data Source Priority (Step 1)
-- Address is geocoded with Google Maps.
-- `city`, `state`, `county`, `zip_code`, `lat`, `lng` come from Google Maps (or manual user edit).
-- ATTOM enriches property fields (apn, acreage, property_type, year_built, last_sale_price, taxes, demographics, etc.).
-- ATTOM request cadence:
-  1. Geo snapshot by `lat/lng` first.
-  2. Parcel+FIPS (`expandedprofile`) when APN/FIPS available.
-  3. Address (`basicprofile`), then normalized address fallback.
-  4. Detail by `attomid`.
-  5. Expanded profile by address.
-  6. Community demographics by `geoIdV4` (or lookup fallback).
-- If ATTOM has no result, PDF values can fill empty fields.
+## 3) APN / Parcel Normalization Rules
+- Any parcel/APN value from PDF, manual, or API must be normalized before storing:
+  - trim edges
+  - remove internal spaces
+  - remove dashes (`-`)
+- Applies to both:
+  - `parcel_1`
+  - `parcelNumber`
+- Aliases must stay synchronized (`parcel_1` and `parcelNumber` represent same normalized value).
 
-## 5) PDF vs API Fill Rules
-- Uploaded file extracts fields into `pdf_values`.
-- If field is empty/default, PDF can fill it.
-- API/AI values should not overwrite user-entered non-default values.
-- Discrepancy tags:
-  - `PDF discrepancy: ...` when current value differs from PDF value.
-  - `API discrepancy: ...` when current value differs from API value.
-- Parcel comparison ignores spaces and dashes for matching.
+## 4) Step 1 (Location & Details)
+- Address can come from manual entry or PDF extraction.
+- If address exists and `lat/lng` are missing, geocode must run and map preview must render.
+- Geocode/derived fields (`city/state/county/zip/fips`) follow global priority rules.
+- PDF fallback can fill empty/default fields for:
+  - owner name
+  - parcel/APN
+  - acreage
+  - property type
+  - year built
+  - last sale price
+- AI Auto-Fill in Step 1 uses selected provider from sidebar toggle.
 
-## 6) Sync Model (Google Sheets <-> Web)
+## 5) Upload + PDF Analysis
+- Supported formats: `.csv`, `.xls`, `.xlsx`, `.pdf`.
+- Timeout for analysis network operations is `120s`.
+- Timeout applies to:
+  - storage upload
+  - analyze-url request
+  - direct analyze fallback
+- Timeout does not interrupt local merge lifecycle.
+- On upload error (including timeout), error message stays visible until:
+  - user uploads a new file, or
+  - user clicks `Continue Manually`.
+- On success, upload card auto-resets.
+
+## 6) API Provider Selection
+- Sidebar provides exclusive provider toggles:
+  - Melissa
+  - ATTOM
+  - Rentcast
+  - ReportAllUSA
+- Exactly one provider is active at a time.
+- Autofill must use only the selected provider for that action.
+
+## 7) Taxes (Step 5)
+- Taxes Auto-Fill uses selected provider and existing APN.
+- APN is required for taxes autofill.
+- FRED 10Y treasury is attempted independently for taxes flow.
+- Provider tax failure must not erase existing manual/PDF values.
+
+## 8) Google Sheets Sync
 - Web -> Sheet:
-  - Debounced sync of mapped input fields (`/api/sheet/sync`).
-  - Step `Next` enforces a flush sync before advancing.
-  - P&L has explicit sync endpoints for original/grouped rows.
+  - debounced sync on mapped fields
+  - step transitions flush pending sync
 - Sheet -> Web:
-  - On edit-load (`/api/sheet/load`) app hydrates:
-    - Inputs, defaults, outputs, P&L original/grouped rows.
-  - Results can be refreshed from sheet on demand.
-- Label-based output loading reads `Output Fields!B:C` to support fields not hardcoded in mapping.
+  - load endpoint hydrates inputs/defaults/outputs
+- Critical non-sheet state (`pdf_values`, `api_values`, grouped P&L metadata) must remain local app state and not be accidentally discarded.
 
-## 7) P&L (Step 3)
-- Users can add original Income and Expense rows manually.
-- AI grouping creates grouped categories and assignments.
-- Grouping gate:
-  - Must match totals (original vs grouped) to enable Next.
-  - Visual status indicates match/non-match.
-- UI names:
-  - "Original" renamed to "Historical".
-- Delete action uses trash icon.
+## 9) Step Transition to Results
+- Before moving from Taxes to Results, objective-search script execution is required.
+- If script fails, transition should be blocked and user informed.
 
-## 8) Taxes (Step 5)
-- `Full Whammy Tax Bump?` is Yes/No toggle.
-- `Year 1 Tax Increase` only visible when Full Whammy = `No`.
-- `Year 1 Tax Increase` is percentage semantics:
-  - User input `7` means `7%`.
+## 10) Results View
+- Download Report supports:
+  - Excel export
+  - Google Sheets copy/open flow
+- Share button is removed.
 
-## 9) Results Dashboard
-- Real Estate Valuation card is editable and includes slider.
-- Summary cards include icons and formatting.
-- Income & Expenses Comparison table includes:
-  - Historical T-12, RR, RE, Per Lot.
-  - Negative values shown in red.
-- Rent/NOI/Taxes chart:
-  - Uses year 0-5.
-  - Year 0 uses Historical T-12 totals.
-  - Hover tooltip displays value per segment.
-- Share + Download:
-  - Download exports Google Sheet as Excel.
+## 11) Definition of Done for Any New Change
+- Update this `FEATURES.md` if behavior changed.
+- Run build and confirm no regression in affected steps.
+- Re-check these critical invariants:
+  - Manual/PDF/API hierarchy preserved.
+  - APN normalization preserved.
+  - Discrepancy labels still accurate.
+  - Map still appears when PDF provides address.
+  - Timeout/error UX behavior unchanged unless explicitly requested.
 
-## 10) Known Contracts
-- `owner_name` must be available in Step 1 and should be populated from ATTOM when present.
-- Output label scan must cover large templates (`B2:C2000`) so rows are not truncated.
-- ATTOM multi-endpoint merges must preserve non-empty owner/identifier/address data (later null values cannot erase previous valid values).
-- Output label duplicates cannot overwrite a non-empty value with an empty duplicate row.
-
-## Regression Checklist
-- [ ] New project copies defaults D -> C without writing B labels.
-- [ ] Edit existing valuation loads inputs from sheet (not blank).
-- [ ] Owner name is populated from ATTOM when ATTOM has owner info.
-- [ ] Discrepancy tags show PDF/API mismatch correctly.
-- [ ] Management fee values appear in Results table.
-- [ ] RR NOI appears correctly.
-- [ ] Negative values render in red and with negative sign.
-- [ ] Next button stays blocked while upload/AI/autofill/sync is running.
+## Regression Checklist (Run on Every Change)
+- [ ] PDF upload fills fields without overriding manual data.
+- [ ] `pdf_values` and `api_values` are both preserved after autofill.
+- [ ] Parcel/APN is normalized (trim + no spaces + no dashes).
+- [ ] `parcel_1` and `parcelNumber` remain synchronized.
+- [ ] Address from PDF triggers geocode/map when `lat/lng` are missing.
+- [ ] API autofill does not replace manual/PDF values.
+- [ ] API discrepancy labels still render when values differ.
+- [ ] Timeout message behavior matches spec (persists on error).
+- [ ] Next button blocking rules still work during busy states.
+- [ ] `npm run build` passes.

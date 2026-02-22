@@ -3,6 +3,7 @@ import { SHEET_MAPPING } from '@/config/sheetMapping';
 import { PNL_EXPENSE_KEYS, PNL_REVENUE_KEYS } from '@/config/pnlMapping';
 
 export const runtime = 'nodejs';
+const REQUEST_TIMEOUT_MS = 120_000;
 
 const SUPPORTED_MIME_TYPES = new Set([
     'text/csv',
@@ -48,6 +49,24 @@ ${formatList(expenseKeys)}
 `;
 };
 
+const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(input, {
+            ...init,
+            signal: controller.signal,
+        });
+    } catch (error: any) {
+        if (error?.name === 'AbortError') {
+            throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds`);
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
 export async function POST(req: Request) {
     try {
         const apiKey = process.env.GEMINI_API_KEY;
@@ -74,7 +93,7 @@ export async function POST(req: Request) {
         const keys = [...generalKeys, ...PNL_REVENUE_KEYS, ...PNL_EXPENSE_KEYS];
         const prompt = buildPrompt(keys);
 
-        const response = await fetch(
+        const response = await fetchWithTimeout(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:generateContent?key=${apiKey}`,
             {
                 method: 'POST',
@@ -99,7 +118,8 @@ export async function POST(req: Request) {
                         response_mime_type: 'application/json'
                     }
                 })
-            }
+            },
+            REQUEST_TIMEOUT_MS
         );
 
         if (!response.ok) {
@@ -138,6 +158,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ data: filtered });
     } catch (error: any) {
         console.error('Valuation analyze failed:', error);
+        if (String(error?.message || '').toLowerCase().includes('timed out')) {
+            return NextResponse.json({ error: error.message }, { status: 504 });
+        }
         return NextResponse.json({ error: error.message || 'Analysis failed' }, { status: 500 });
     }
 }

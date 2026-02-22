@@ -22,6 +22,7 @@ interface ValuationUploadPanelProps {
 
 const SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf'];
 const STORAGE_BUCKET = 'valuation-uploads';
+const REQUEST_TIMEOUT_MS = 120_000;
 
 const sanitizeFileName = (name: string) =>
     name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
@@ -35,6 +36,8 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [status, setStatus] = useState<UploadStatus>('idle');
     const [message, setMessage] = useState('');
+    const [loadingTitle, setLoadingTitle] = useState('Uploading file...');
+    const [loadingDetail, setLoadingDetail] = useState('AI is analyzing the document.');
     const [isDragging, setIsDragging] = useState(false);
     const [fileName, setFileName] = useState('');
     const [attomKeyInput, setAttomKeyInput] = useState('');
@@ -88,10 +91,46 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
     const reset = () => {
         setStatus('idle');
         setMessage('');
+        setLoadingTitle('Uploading file...');
+        setLoadingDetail('AI is analyzing the document.');
         setIsDragging(false);
         setFileName('');
         if (inputRef.current) {
             inputRef.current.value = '';
+        }
+    };
+
+    const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        try {
+            return await Promise.race([
+                promise,
+                new Promise<T>((_, reject) => {
+                    timeoutId = setTimeout(() => {
+                        reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds`));
+                    }, timeoutMs);
+                }),
+            ]);
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+        }
+    };
+
+    const fetchWithTimeout = async (input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            return await fetch(input, {
+                ...init,
+                signal: controller.signal,
+            });
+        } catch (error: any) {
+            if (error?.name === 'AbortError') {
+                throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds`);
+            }
+            throw error;
+        } finally {
+            clearTimeout(timeoutId);
         }
     };
 
@@ -136,8 +175,12 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
     };
 
     const analyzeViaStorageUrl = async (file: File) => {
-        const fileUrl = await uploadToStorage(file);
-        const response = await fetch('/api/valuation/analyze-url', {
+        setLoadingTitle('Uploading file...');
+        setLoadingDetail('Preparing secure upload...');
+        const fileUrl = await withTimeout(uploadToStorage(file), REQUEST_TIMEOUT_MS, 'File upload');
+        setLoadingTitle('AI is analyzing the document...');
+        setLoadingDetail('Processing and structuring the extracted data.');
+        const response = await fetchWithTimeout('/api/valuation/analyze-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -145,7 +188,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
                 fileName: file.name,
                 mimeType: file.type || ''
             })
-        });
+        }, REQUEST_TIMEOUT_MS);
         const payload = await parseJsonSafely(response);
         if (!response.ok) {
             throw new Error(payload.error || 'Unable to analyze document');
@@ -154,12 +197,14 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
     };
 
     const analyzeViaDirectUpload = async (file: File) => {
+        setLoadingTitle('Retrying with direct analysis...');
+        setLoadingDetail('Storage path was slow or unavailable, trying fallback.');
         const formData = new FormData();
         formData.append('file', file);
-        const response = await fetch('/api/valuation/analyze', {
+        const response = await fetchWithTimeout('/api/valuation/analyze', {
             method: 'POST',
             body: formData,
-        });
+        }, REQUEST_TIMEOUT_MS);
         const payload = await parseJsonSafely(response);
         if (!response.ok) {
             throw new Error(payload.error || 'Unable to analyze document');
@@ -168,8 +213,11 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
     };
 
     const processFile = async (file: File) => {
+        let shouldAutoReset = false;
         setStatus('loading');
-        setMessage('Uploading file and analyzing with AI...');
+        setMessage('');
+        setLoadingTitle('Uploading file...');
+        setLoadingDetail('AI is analyzing the document.');
         setFileName(file.name);
 
         try {
@@ -178,28 +226,39 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
                 analyzedData = await analyzeViaStorageUrl(file);
             } catch (storagePathError: any) {
                 console.warn('Storage-based analyze failed, falling back to direct upload:', storagePathError?.message || storagePathError);
-                setMessage('Primary upload failed. Retrying with direct analysis...');
                 analyzedData = await analyzeViaDirectUpload(file);
             }
 
-            await onAutofill(analyzedData || {});
+            setLoadingTitle('Applying extracted fields...');
+            setLoadingDetail('Saving data and syncing with your project.');
+            await Promise.resolve(onAutofill(analyzedData || {}));
             setStatus('success');
-            setMessage('Documento analizado correctamente. Los campos disponibles han sido completados.');
+            setMessage('Document analyzed successfully. Available fields were populated.');
+            shouldAutoReset = true;
         } catch (error: any) {
             console.error('Gemini analysis failed:', error);
             setStatus('error');
+            const lower = String(error?.message || '').toLowerCase();
+            const isTimeout = lower.includes('timed out') || lower.includes('timeout') || error?.name === 'AbortError';
             setMessage(
-                error?.message?.includes('Storage')
-                    ? 'No fue posible subir el archivo. Verifica el bucket de Storage.'
-                    : 'No fue posible analizar el documento. Intenta con otro archivo o revisa el formato.'
+                isTimeout
+                    ? 'The upload/analysis took longer than 120 seconds. Please retry or continue manually.'
+                    : error?.message?.includes('Storage')
+                        ? 'File upload failed. Check Storage bucket configuration and retry.'
+                        : 'Could not analyze the document. Try another file or continue manually.'
             );
         } finally {
-            setTimeout(reset, 2500);
+            if (shouldAutoReset) {
+                setTimeout(reset, 2500);
+            }
         }
     };
 
     const handleFileSelect = async (file?: File | null) => {
         if (!file || status === 'loading') return;
+        if (inputRef.current) {
+            inputRef.current.value = '';
+        }
         await processFile(file);
     };
 
@@ -307,10 +366,10 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
                     <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4 text-xs text-sky-700 dark:text-sky-200 space-y-2">
                         <div className="flex items-center gap-2">
                             <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
-                            <span>Uploading file...</span>
+                            <span>{loadingTitle}</span>
                         </div>
-                        <p>AI is analyzing the document.</p>
-                        <p>Processing and structuring the extracted data.</p>
+                        <p>{loadingDetail}</p>
+                        <p>Please wait up to 120 seconds before retrying.</p>
                     </div>
                 )}
 
@@ -321,8 +380,15 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
                 )}
 
                 {status === 'error' && (
-                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-700 dark:text-red-200">
-                        {message}
+                    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-700 dark:text-red-200 space-y-3">
+                        <p>{message}</p>
+                        <button
+                            type="button"
+                            onClick={reset}
+                            className="rounded-md border border-red-400/60 px-3 py-1 text-xs font-semibold hover:bg-red-500/10 transition-colors"
+                        >
+                            Continue Manually
+                        </button>
                     </div>
                 )}
 
@@ -337,7 +403,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
                     </div>
                     <div className="flex items-start gap-2">
                         <span className="material-symbols-outlined text-sm">restore</span>
-                        <span>Upload card resets after each analysis.</span>
+                        <span>Success resets automatically; errors stay until you retry.</span>
                     </div>
                 </div>
 
