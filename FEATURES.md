@@ -61,10 +61,11 @@ When any feature is added or changed:
   - direct analyze request
   - analyze-url fallback request
 - Timeout does not interrupt local merge lifecycle.
+- Loading panel shows a 120s countdown (`Automatic timeout in Xs`) during analysis.
 - On upload error (including timeout), error message stays visible until:
   - user uploads a new file, or
   - user clicks `Continue Manually`.
-- On success, upload card auto-resets.
+- On success, upload message stays visible for 15 seconds, then upload card auto-resets.
 
 ## 6) API Provider Selection
 - Sidebar provides exclusive provider toggles:
@@ -119,5 +120,7 @@ When any feature is added or changed:
 - [ ] API autofill does not replace manual/PDF values.
 - [ ] API discrepancy labels still render when values differ.
 - [ ] Timeout message behavior matches spec (persists on error).
+- [ ] Loading countdown is visible and decrements from 120s during analysis.
+- [ ] Success message remains visible for 15s before auto-reset.
 - [ ] Next button blocking rules still work during busy states.
 - [ ] `npm run build` passes.

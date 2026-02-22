@@ -23,6 +23,8 @@ interface ValuationUploadPanelProps {
 const SUPPORTED_EXTENSIONS = ['.csv', '.xls', '.xlsx', '.pdf'];
 const STORAGE_BUCKET = 'valuation-uploads';
 const REQUEST_TIMEOUT_MS = 120_000;
+const REQUEST_TIMEOUT_SECONDS = Math.round(REQUEST_TIMEOUT_MS / 1000);
+const SUCCESS_AUTO_RESET_MS = 15_000;
 
 const sanitizeFileName = (name: string) =>
     name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
@@ -38,6 +40,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
     const [message, setMessage] = useState('');
     const [loadingTitle, setLoadingTitle] = useState('Uploading file...');
     const [loadingDetail, setLoadingDetail] = useState('AI is analyzing the document.');
+    const [countdownSeconds, setCountdownSeconds] = useState(REQUEST_TIMEOUT_SECONDS);
     const [isDragging, setIsDragging] = useState(false);
     const [fileName, setFileName] = useState('');
     const [attomKeyInput, setAttomKeyInput] = useState('');
@@ -54,6 +57,20 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
 
     React.useEffect(() => {
         busyCallbackRef.current?.(status === 'loading');
+    }, [status]);
+
+    React.useEffect(() => {
+        if (status !== 'loading') {
+            setCountdownSeconds(REQUEST_TIMEOUT_SECONDS);
+            return;
+        }
+
+        setCountdownSeconds(REQUEST_TIMEOUT_SECONDS);
+        const timer = setInterval(() => {
+            setCountdownSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+        }, 1000);
+
+        return () => clearInterval(timer);
     }, [status]);
 
     const getAuthHeader = async (): Promise<Record<string, string>> => {
@@ -247,7 +264,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
             );
         } finally {
             if (shouldAutoReset) {
-                setTimeout(reset, 2500);
+                setTimeout(reset, SUCCESS_AUTO_RESET_MS);
             }
         }
     };
@@ -367,7 +384,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
                             <span>{loadingTitle}</span>
                         </div>
                         <p>{loadingDetail}</p>
-                        <p>Please wait up to 120 seconds before retrying.</p>
+                        <p>Automatic timeout in {countdownSeconds}s.</p>
                     </div>
                 )}
 
@@ -401,7 +418,7 @@ export const ValuationUploadPanel: React.FC<ValuationUploadPanelProps> = ({
                     </div>
                     <div className="flex items-start gap-2">
                         <span className="material-symbols-outlined text-sm">restore</span>
-                        <span>Success resets automatically; errors stay until you retry.</span>
+                        <span>Success message stays for 15s; errors stay until you retry.</span>
                     </div>
                 </div>
 
