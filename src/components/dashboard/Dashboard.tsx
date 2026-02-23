@@ -12,6 +12,7 @@ interface DashboardProps {
     projectId?: string | null;
     onRefreshOutputs?: () => void;
     refreshingOutputs?: boolean;
+    objectiveRunNotice?: { id: number; text: string } | null;
 }
 
 type MetricItem = {
@@ -480,7 +481,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     shareId,
     projectId,
     onRefreshOutputs,
-    refreshingOutputs
+    refreshingOutputs,
+    objectiveRunNotice
 }) => {
     const toNumber = (value: any) => {
         if (value === null || value === undefined || value === '') return null;
@@ -1112,7 +1114,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const projectAddress = inputs?.address || 'Address pending';
     const [downloadMenuOpen, setDownloadMenuOpen] = useState(false);
     const [downloadingFormat, setDownloadingFormat] = useState<'excel' | 'sheets' | null>(null);
+    const [visibleObjectiveNotice, setVisibleObjectiveNotice] = useState<{ id: number; text: string } | null>(null);
     const downloadMenuRef = React.useRef<HTMLDivElement | null>(null);
+
+    React.useEffect(() => {
+        if (!objectiveRunNotice?.text) return;
+        setVisibleObjectiveNotice(objectiveRunNotice);
+        const timer = window.setTimeout(() => {
+            setVisibleObjectiveNotice((current) =>
+                current?.id === objectiveRunNotice.id ? null : current
+            );
+        }, 15_000);
+        return () => window.clearTimeout(timer);
+    }, [objectiveRunNotice?.id, objectiveRunNotice?.text]);
 
     React.useEffect(() => {
         if (!downloadMenuOpen) return;
@@ -1189,6 +1203,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 text-slate-900 dark:text-white">
+            {visibleObjectiveNotice && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-200">
+                    {visibleObjectiveNotice.text}
+                </div>
+            )}
             <div className="flex flex-wrap justify-between items-start gap-4 pb-6 border-b border-slate-200 dark:border-[#232f48]">
                 <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-3 flex-wrap">

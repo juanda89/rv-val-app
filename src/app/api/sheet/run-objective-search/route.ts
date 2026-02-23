@@ -1,20 +1,19 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getDriveClientWithEnvOAuth, getScriptClientWithEnvOAuth } from '@/lib/google';
 
-const SCRIPT_MIME_TYPE = 'application/vnd.google-apps.script';
-const FUNCTION_NAME = 'ejecutarBusquedaObjetivoProporcional';
+const FUNCTION_NAME = 'ajustarObjetivoInterno';
+const WEBAPP_URL = process.env.GOOGLE_APPS_SCRIPT_WEBAPP_URL?.trim() || '';
+const WEBHOOK_SECRET = process.env.GOOGLE_APPS_SCRIPT_WEBHOOK_SECRET?.trim() || '';
+const WEBAPP_TIMEOUT_MS = 120_000;
 
-const extractScriptError = (errorPayload: any) => {
-    const details = Array.isArray(errorPayload?.details) ? errorPayload.details : [];
-    const executionError = details.find((detail: any) => detail?.errorMessage);
-    if (executionError?.errorMessage) {
-        return executionError.errorMessage as string;
+const parseJsonSafe = async (response: Response) => {
+    const text = await response.text();
+    if (!text.trim()) return {};
+    try {
+        return JSON.parse(text);
+    } catch {
+        return { __invalidJson: true, raw: text };
     }
-    if (typeof errorPayload?.message === 'string' && errorPayload.message.trim()) {
-        return errorPayload.message.trim();
-    }
-    return 'Apps Script execution failed.';
 };
 
 export async function POST(req: Request) {
@@ -22,6 +21,20 @@ export async function POST(req: Request) {
         const { projectId } = await req.json();
         if (!projectId) {
             return NextResponse.json({ error: 'Missing projectId' }, { status: 400 });
+        }
+
+        if (!WEBAPP_URL) {
+            return NextResponse.json(
+                { error: 'Missing GOOGLE_APPS_SCRIPT_WEBAPP_URL configuration.' },
+                { status: 500 }
+            );
+        }
+
+        if (!WEBHOOK_SECRET) {
+            return NextResponse.json(
+                { error: 'Missing GOOGLE_APPS_SCRIPT_WEBHOOK_SECRET configuration.' },
+                { status: 500 }
+            );
         }
 
         const supabase = createClient(
@@ -47,45 +60,115 @@ export async function POST(req: Request) {
         }
 
         const spreadsheetId = project.spreadsheet_id;
-        const drive = await getDriveClientWithEnvOAuth(req);
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => abortController.abort(), WEBAPP_TIMEOUT_MS);
 
-        const scriptsInSpreadsheet = await drive.files.list({
-            q: `'${spreadsheetId}' in parents and mimeType='${SCRIPT_MIME_TYPE}' and trashed=false`,
-            fields: 'files(id,name)',
-            supportsAllDrives: true,
-            includeItemsFromAllDrives: true,
-            pageSize: 10,
-        });
-
-        const scriptFile = scriptsInSpreadsheet.data.files?.[0];
-        if (!scriptFile?.id) {
+        let webAppResponse: Response;
+        try {
+            webAppResponse = await fetch(WEBAPP_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    spreadsheetId,
+                    secret: WEBHOOK_SECRET,
+                }),
+                signal: abortController.signal,
+                cache: 'no-store',
+            });
+        } catch (fetchError: any) {
+            if (fetchError?.name === 'AbortError') {
+                return NextResponse.json(
+                    {
+                        error: `Apps Script Web App timeout after ${Math.round(
+                            WEBAPP_TIMEOUT_MS / 1000
+                        )} seconds.`,
+                    },
+                    { status: 504 }
+                );
+            }
+            console.error('Run objective search webapp request failed:', fetchError);
             return NextResponse.json(
-                { error: 'No Apps Script project found in this spreadsheet copy.' },
-                { status: 404 }
+                { error: 'Failed to call Apps Script Web App.' },
+                { status: 502 }
+            );
+        } finally {
+            clearTimeout(timeoutId);
+        }
+
+        const payload = await parseJsonSafe(webAppResponse);
+        const payloadStatus =
+            typeof payload?.status === 'string' ? payload.status.trim().toLowerCase() : '';
+        const webAppSuccess = payload?.ok === true || payloadStatus === 'success';
+        const webAppFailure =
+            payload?.ok === false || payloadStatus === 'error' || payloadStatus === 'failed';
+
+        if (!webAppResponse.ok) {
+            if (webAppResponse.status === 401 || webAppResponse.status === 403) {
+                return NextResponse.json(
+                    {
+                        error:
+                            payload?.error ||
+                            'Apps Script Web App authorization failed. Verify deploy access and webhook secret.',
+                    },
+                    { status: 500 }
+                );
+            }
+            if (webAppResponse.status === 404) {
+                return NextResponse.json(
+                    {
+                        error:
+                            payload?.error ||
+                            'Apps Script Web App endpoint not found. Verify GOOGLE_APPS_SCRIPT_WEBAPP_URL.',
+                    },
+                    { status: 500 }
+                );
+            }
+            return NextResponse.json(
+                {
+                    error:
+                        payload?.error ||
+                        `Apps Script Web App failed with status ${webAppResponse.status}.`,
+                },
+                { status: 500 }
             );
         }
 
-        const scripts = await getScriptClientWithEnvOAuth(req);
-        const runResponse = await scripts.scripts.run({
-            scriptId: scriptFile.id,
-            requestBody: {
-                function: FUNCTION_NAME,
-                devMode: false,
-            },
-        });
+        if (webAppFailure) {
+            return NextResponse.json(
+                {
+                    error:
+                        payload?.error ||
+                        payload?.message ||
+                        payload?.data?.error ||
+                        'Apps Script Web App returned an execution error.',
+                },
+                { status: 500 }
+            );
+        }
 
-        const executionError = runResponse.data.error;
-        if (executionError) {
-            const message = extractScriptError(executionError);
-            return NextResponse.json({ error: message }, { status: 500 });
+        if (
+            !payload ||
+            typeof payload !== 'object' ||
+            Array.isArray(payload) ||
+            !webAppSuccess
+        ) {
+            return NextResponse.json(
+                {
+                    error:
+                        'Apps Script Web App returned an invalid response. Expected JSON with ok=true or status=success.',
+                },
+                { status: 500 }
+            );
         }
 
         return NextResponse.json({
             ok: true,
             spreadsheetId,
-            scriptId: scriptFile.id,
-            functionName: FUNCTION_NAME,
-            result: runResponse.data.response?.result ?? null,
+            functionName: payload?.functionName || payload?.data?.functionName || FUNCTION_NAME,
+            scriptSource: 'webapp',
+            result: payload?.result ?? payload?.data ?? null,
         });
     } catch (error: any) {
         console.error('Run objective search failed:', error);

@@ -57,6 +57,7 @@ export const WizardLayout = ({
     const handlePnlBusy = React.useCallback((busy: boolean) => setBusyState('pnl', busy), [setBusyState]);
     const handleTaxesBusy = React.useCallback((busy: boolean) => setBusyState('taxes', busy), [setBusyState]);
     const [refreshingOutputs, setRefreshingOutputs] = useState(false);
+    const [objectiveRunNotice, setObjectiveRunNotice] = useState<{ id: number; text: string } | null>(null);
     const { sync, isSyncing } = useSheetSync(projectId || '');
     const pendingSyncRef = useRef<Record<string, any>>({});
     const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -408,6 +409,22 @@ export const WizardLayout = ({
         return payload;
     }, [formData]);
 
+    const summarizeObjectiveResult = React.useCallback((payload: any) => {
+        const result = payload?.result;
+        const defaultMessage = 'Objective script executed successfully.';
+        if (result === null || result === undefined) return defaultMessage;
+        if (typeof result === 'string' || typeof result === 'number' || typeof result === 'boolean') {
+            return `Objective script executed: ${String(result)}`;
+        }
+        try {
+            const serialized = JSON.stringify(result);
+            if (!serialized) return defaultMessage;
+            return `Objective script executed: ${serialized.length > 260 ? `${serialized.slice(0, 260)}...` : serialized}`;
+        } catch {
+            return defaultMessage;
+        }
+    }, []);
+
     const handleAutofill = React.useCallback(async (extracted: Record<string, any>) => {
         if (!extracted || Object.keys(extracted).length === 0) return;
 
@@ -697,6 +714,10 @@ export const WizardLayout = ({
                             runJson?.error || 'Failed to execute objective search. Please retry before viewing Results.'
                         );
                     }
+                    setObjectiveRunNotice({
+                        id: Date.now(),
+                        text: summarizeObjectiveResult(runJson),
+                    });
                 }
             } catch (error: any) {
                 console.error('Failed before advancing step:', error);
@@ -793,8 +814,12 @@ export const WizardLayout = ({
                                 >
                                     {creatingProject
                                         ? "Creating..."
-                                        : nextSyncing || isSyncing
-                                            ? "Syncing..."
+                                        : nextSyncing
+                                            ? currentStep === 5
+                                                ? "Running Script..."
+                                                : "Syncing..."
+                                            : isSyncing
+                                                ? "Syncing..."
                                             : isExternalBusy
                                                 ? "Working..."
                                                 : "Next"}
@@ -840,6 +865,7 @@ export const WizardLayout = ({
                                 projectId={projectId}
                                 onRefreshOutputs={refreshOutputs}
                                 refreshingOutputs={refreshingOutputs}
+                                objectiveRunNotice={objectiveRunNotice}
                             />
                         )}
                     </main>

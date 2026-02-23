@@ -93,12 +93,21 @@ When any feature is added or changed:
 ## 9) Step Transition to Results
 - Before moving from Taxes to Results, objective-search script execution is required.
 - If script fails, transition should be blocked and user informed.
+- While Step 5 -> Results execution is running, the Next button remains in loading state (`Running Script...`) until completion/failure.
+- Objective-search execution route uses central Apps Script Web App (`GOOGLE_APPS_SCRIPT_WEBAPP_URL`) and sends:
+  - `spreadsheetId`
+  - `secret` (`GOOGLE_APPS_SCRIPT_WEBHOOK_SECRET`)
+- Current function target for script execution is `ajustarObjetivoInterno` (temporary test mode).
+- No `scripts.run` execution path is used in this mode.
+- Success response compatibility accepted by backend:
+  - `{ ok: true, ... }` or `{ status: "success", ... }`.
 
 ## 10) Results View
 - Download Report supports:
   - Excel export
   - Google Sheets copy/open flow
 - Share button is removed.
+- After successful Step 5 script execution, Results view shows a temporary response banner for 15 seconds.
 
 ## 11) Definition of Done for Any New Change
 - Update this `FEATURES.md` if behavior changed.

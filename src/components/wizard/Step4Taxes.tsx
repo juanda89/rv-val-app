@@ -274,9 +274,11 @@ export const Step4Taxes: React.FC<Step4Props> = ({
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Taxes</h2>
                         <p className="text-sm text-slate-500 dark:text-gray-400">Configure tax assumptions for Year 2.</p>
                     </div>
-                    <Button onClick={fetchProviderData} disabled={loading || !canFetchProvider} variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-500/10">
-                        {loading ? "Fetching..." : "AI Auto-Fill"}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button onClick={fetchProviderData} disabled={loading || !canFetchProvider} variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-500/10">
+                            {loading ? "Fetching..." : "AI Auto-Fill"}
+                        </Button>
+                    </div>
                 </div>
             </div>
             {message && (
